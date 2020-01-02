@@ -1,0 +1,7 @@
+LOAD DATA
+INFILE'C:\MY_DIR\user_info.dat'
+BADFILE'C:\MY_DIR\user_info.bad'
+DISCARDFILE'C:\MY_DIR\user_info.dsc'
+APPEND INTO TABLE user_info_dwh
+FIELDS TERMINATED BY ","
+(u_time,user_id,name,contact_no,is_type)

@@ -1,0 +1,98 @@
+﻿create or replace trigger user_info_trigger
+after insert or update on user_info
+for each row
+begin
+insert into staging_area.user_info_sa values(sysdate,:new.user_id,:new.name,:new.contact_no,:new.is_type);
+end;
+
+
+create or replace trigger vendor_main1_trigger
+after insert or update on vendor_main1
+for each row
+begin
+insert into staging_area.vendor_main1_sa values(sysdate,:new.order_id,:new.vendor_id,:new.purchase_date,:new.glass_material,:new.quantity,:new.amount_per_glass,:new.total_amount);
+end;
+
+
+create or replace trigger godown_deatils_trigger
+after insert or update on godown_details
+for each row
+begin
+insert into staging_area.godown_details_sa values(sysdate,:new.godown_id,:new.godown_name,:new.godown_city);
+end;
+
+
+create or replace trigger bm_glass_details_trigger
+after insert or update on bm_glass_details
+for each row
+begin
+insert into staging_area.bm_glass_details_sa values(sysdate,:new.glass_material,:new.quantity,:new.amount_per_glass);
+end;
+
+//changing manufactured to manuf
+create or replace trigger glass_manuf_order_trigger
+after insert or update on glass_manufactured_order
+for each row
+begin
+insert into staging_area.glass_manufactured_order_sa values(sysdate,:new.gm_id,:new.glass_material,:new.shape,:new.quantity,:new.gm_date,:new.length,:new.width,:new.height,:new.amount_per_glass);
+end;
+
+
+create or replace trigger am_glass_details1_trigger
+after insert or update on am_glass_details1
+for each row
+begin
+insert into staging_area.am_glass_details1_sa values(sysdate,:new.id,:new.glass_material,:new.shape,:new.quantity,:new.amount_per_glass);
+end;
+
+
+
+
+create or replace trigger godown_placement1_trigger
+after insert or update on godown_placement1
+for each row
+begin
+insert into staging_area.godown_placement1_sa values(sysdate,:new.id,:new.godown_id,:new.gp_date,:new.quantity,:new.glass_material,:new.shape);
+end;
+
+
+create or replace trigger godown_stock_details1_trigger
+after insert or update on godown_stock_details1
+for each row
+begin
+insert into staging_area.godown_stock_details1_sa values(sysdate,:new.id,:new.godown_id,:new.glass_material,:new.shape,:new.quantity);
+end;
+
+
+create or replace trigger shop_details_trigger
+after insert or update on shop_details
+for each row
+begin
+insert into staging_area.shop_details_sa values(sysdate,:new.shop_id,:new.shop_name,:new.city);
+end;
+
+
+
+
+create or replace trigger shop_arrival_stock1_trigger
+after insert or update on shop_arrival_stock1
+for each row
+begin
+insert into staging_area.shop_arrival_stock1_sa values(sysdate,:new.sas_id,:new.shop_id,:new.godown_id,:new.glass_material,:new.shape,:new.quantity,:new.sas_date);
+end;
+
+
+create or replace trigger shop_stock_details1_trigger
+after insert or update on shop_stock_details1
+for each row
+begin
+insert into staging_area.shop_stock_details1_sa values(sysdate,:new.shop_id,:new.glass_material,:new.shape,:new.quantity,:new.amount_per_glass);
+end;
+
+
+create or replace trigger consumer1_trigger
+after insert or update on consumer1
+for each row
+begin
+insert into staging_area.consumer1_sa values(sysdate,:new.order_id,:new.shop_id,:new.glass_material,:new.shape,:new.quantity,:new.amount_per_glass,:new.total_amount,:new.purchase_date);
+end;

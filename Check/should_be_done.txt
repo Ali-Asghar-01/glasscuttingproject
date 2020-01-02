@@ -1,0 +1,15 @@
+1) button k pheche check constraint lagana hay.
+2) har admin sb kuch nahi kr skta.
+3) date problem solve krna hay.. (sysdate k through)
+4) Delete krney k baad.. dubara record laney ka b option huga super admin k pas.
+5) ID auto increment huni chaiye sb k liye.. but joh existing user ya vendor hay
+   usky liye waheen hu joh assign krdi gae hay.
+6) Super Admin user create kr skta hay..
+7) Every admin can change his/her password.
+8) No need to create different forms for every user, either a mid level or super,
+   just code at button and give particular privelege over that button.
+9) Particular Alphabet sey shuru huney waley sarey record aney chaiye.
+10) SuperAdmin k pas sb users ki authority hugy.. or woh in sb k password b change kr sakega.
+   or har user ko disable b kr skta hay.. if he is on leave or something else.
+11) Unlimited tablespace nahi dena hay.. kuch Mega bytes tk space dena hay user ko table bananey
+   k liye.

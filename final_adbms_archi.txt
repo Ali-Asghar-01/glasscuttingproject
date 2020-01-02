@@ -1,0 +1,144 @@
+CREATE TABLE user_info(
+    user_id int NOT NULL PRIMARY KEY,
+    name VARCHAR2(20),
+    contact_no VARCHAR2(14),
+    is_type VARCHAR2(20)
+  )
+CREATE SEQUENCE user_info_seq
+     START WITH 1
+     INCREMENT BY 1
+     CACHE 20
+
+
+create table vendor_main1(
+order_id int primary key,
+vendor_id int not null ,
+purchase_date date not null,
+glass_material varchar2(20) not null ,
+foreign key (vendor_id) references user_info(user_id),
+quantity int not null,
+amount_per_glass int not null,
+total_amount int not null);
+
+create sequence vendor_main1_seq
+start with 1
+increment by 1
+cache 20
+
+
+create table godown_details(
+godown_id int not null primary key,
+godown_name varchar2(20) not null,
+godown_city varchar2(20) not null);
+
+create sequence godown_details_seq
+start with 1
+increment by 1
+cache 20
+
+
+create table bm_glass_details(
+  glass_material varchar2(20) primary key,
+  quantity int);
+alter table bm_glass_details
+add amount_per_glass int;
+
+
+create table glass_manufactured_order(
+gm_id int primary key,
+glass_material varchar2(20) not null,
+shape varchar2(20) not null,
+quantity int not null,
+gm_date date,
+length int,
+width int,
+height int,
+amount_per_glass int);
+
+create sequence glass_manufactured_order_seq
+increment by 1
+start with 1
+cache 20
+
+
+create table am_glass_details1(
+id int not null primary key,
+glass_material varchar2(20),
+shape varchar2(20),
+quantity int ,
+amount_per_glass int);
+
+
+create table godown_placement1(
+id int not null primary key,       
+godown_id int not null ,
+gp_date date,
+quantity int not null,
+glass_material varchar2(20)  not null,
+shape varchar2(20) not null,
+foreign key(godown_id) references godown_details(godown_id));
+create sequence godown_placement1_seq
+  start with 1
+  increment by 1
+ cache 20
+
+
+create table godown_stock_details1(
+id int not null primary key,
+      godown_id int not null ,
+      glass_material varchar2(20) not null,
+      shape varchar2(20) not null,
+      quantity int not null,
+      foreign key (godown_id) references godown_details(godown_id));
+--insert into godown_stock_details1 values(1,'Ceramic','Circle',20);
+
+
+create table shop_details(
+  shop_id int primary key,
+  shop_name varchar2(20) not null,
+  city varchar2(20) not null);
+
+SQL> create sequence shop_detai	ls_seq
+  start with 1
+  increment by 1
+  cache 20;
+
+
+ create table shop_arrival_stock1(
+    sas_id int primary key,
+    shop_id int not null,
+    godown_id int not null,
+    glass_material varchar2(20) not null,
+    shape varchar2(20)  not null,
+    quantity int not null,
+    sas_date date not null,
+    foreign key(shop_id) references shop_details(shop_id),
+   foreign key(godown_id) references godown_details(godown_id));
+
+ create sequence shop_arrival_stock_seq1
+    start with 1
+    increment by 1
+   cache 20
+
+
+create table shop_stock_details1(
+  shop_id int not null,
+    glass_material varchar2(20) not null,
+    shape varchar2(20) not null,
+    quantity int,
+    amount_per_glass int,
+    foreign key (shop_id) references shop_details (shop_id),
+    primary key(shop_id,glass_material,shape));
+
+
+create table consumer1(
+            order_id int not null,
+            shop_id int not null,
+            glass_material varchar2(20) not null,
+            shape varchar2(20) not null,
+            quantity int,
+	    amount_per_glass int ,
+            total_amount int,
+	    purchase_date date,
+            foreign key(shop_id)references shop_details(shop_id),
+     	    primary key(order_id))

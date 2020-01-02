@@ -1,0 +1,343 @@
+create or replace procedure exportUserInfo
+is
+v_file UTL_FILE.FILE_TYPE;
+v_userinfo VARCHAR2(2000);
+CURSOR userinfo IS
+select u_time,user_id,name,contact_no,is_type from user_info_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','user_info.dat','w',1000);
+for u in userinfo
+LOOP
+v_userinfo:=u.u_time||','||u.user_id||','||u.name||','||u.contact_no||','||u.is_type;
+UTL_FILE.put_line(v_file,v_userinfo);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from user_info_sa;
+END;
+/
+
+userinfo.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\user_info.dat'
+BADFILE'C:\MY_DIR\user_info.bad'
+DISCARDFILE'C:\MY_DIR\user_info.dsc'
+APPEND INTO TABLE user_info_dwh
+FIELDS TERMINATED BY ","
+(u_time,user_id,name,contact_no,is_type)
+
+sqlldr data_warehouse/helloworld control=C:\MY_DIR\userinfo.ctl direct=true
+
+
+////////////////////////////////////
+create or replace procedure exportVendorMain
+is
+v_file UTL_FILE.FILE_TYPE;
+v_vendormain VARCHAR2(2000);
+CURSOR vendormain IS
+select v_time,order_id,vendor_id,purchase_date,glass_material,quantity,amount_per_glass,total_amount from vendor_main1_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','vandormain.dat','w',1000);
+for u in vendormain
+LOOP
+v_vendormain:= v_time||','||order_id||','||vendor_id||','||purchase_date||','||glass_material||','||quantity||','||amount_per_glass||','||total_amount;
+UTL_FILE.put_line(v_file,v_vendormain);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from vendor_main1_sa;
+END;
+/
+
+vendormain.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\vendormain.dat'
+BADFILE'C:\MY_DIR\vendormain.bad'
+DISCARDFILE'C:\MY_DIR\vendormain.dsc'
+APPEND INTO TABLE vendor_main1_dwh
+FIELDS TERMINATED BY ","
+( v_time,order_id,vendor_id,purchase_date,glass_material,quantity,amount_per_glass,total_amount)
+////////////////////////////////
+
+create or replace procedure exportGodownDetails
+is
+v_file UTL_FILE.FILE_TYPE;
+v_godowndetails VARCHAR2(2000);
+CURSOR godowndetails IS
+select g_time,godown_id,godown_name,godown_city from godown_details_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','godowndetails.dat','w',1000);
+for u in godowndetails
+LOOP
+v_godowndetails:= g_time||','||godown_id||','||godown_name||','||godown_city;
+UTL_FILE.put_line(v_file,v_godowndetails);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from godown_details_sa;
+END;
+/
+
+godowndetails.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\godowndetails.dat'
+BADFILE'C:\MY_DIR\godowndetails.bad'
+DISCARDFILE'C:\MY_DIR\godowndetails.dsc'
+APPEND INTO TABLE godown_details_dwh
+FIELDS TERMINATED BY ","
+( g_time,godown_id,godown_name,godown_city)
+
+///////////////////////////////////
+
+create or replace procedure exportBMGlassDetails
+is
+v_file UTL_FILE.FILE_TYPE;
+v_bmglassdetails VARCHAR2(2000);
+CURSOR bmglassdetails IS
+select bm_time,glass_material,quantity,amount_per_glass from bm_glass_details_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','bmglassdetails.dat','w',1000);
+for u in bmglassdetails
+LOOP
+v_bmglassdetails:=bm_time||','||glass_material||','||quantity||','||amount_per_glass;
+UTL_FILE.put_line(v_file,v_bmglassdetails);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from bm_glass_details_sa;
+END;
+/
+
+godowndetails.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\bmglassdetails.dat'
+BADFILE'C:\MY_DIR\bmglassdetails.bad'
+DISCARDFILE'C:\MY_DIR\bmglassdetails.dsc'
+APPEND INTO TABLE bm_glass_details_dwh
+FIELDS TERMINATED BY ","
+( bm_time,glass_material,quantity,amount_per_glass)
+////////////////////////////////////
+
+create or replace procedure exportGlassManufacturedOrder
+is
+v_file UTL_FILE.FILE_TYPE;
+v_glassmanufacturedorder VARCHAR2(2000);
+CURSOR glassmanufacturedorder IS
+select gm_time,gm_id,glass_material,shape,quantity,gm_date,length,width,height,amount_per_glass from glass_manufactured_order_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','glassmanufacturedorder.dat','w',1000);
+for u in glassmanufacturedorder
+LOOP
+v_glassmanufacturedorder:= gm_time||','||gm_id||','||glass_material||','||shape||','||quantity||','||gm_date||','||length||','||width||','||height||','||amount_per_glass;
+UTL_FILE.put_line(v_file,v_glassmanufacturedorder);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from glass_manufactured_order_sa
+END;
+/
+
+glassmanufacturedorder.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\glassmanufacturedorder.dat'
+BADFILE'C:\MY_DIR\glassmanufacturedorder.bad'
+DISCARDFILE'C:\MY_DIR\glassmanufacturedorder.dsc'
+APPEND INTO TABLE glass_manufactured_order_dwh
+FIELDS TERMINATED BY ","
+( gm_time,gm_id,glass_material,shape,quantity,gm_date,length,width,height,amount_per_glass)
+
+//////////////////////////////////////////////
+
+create or replace procedure exportAMGlassDetails
+is
+v_file UTL_FILE.FILE_TYPE;
+v_amglassdetails VARCHAR2(2000);
+CURSOR amglassdetails IS
+select am_time,id,glass_material,shape,quantity,amount_per_glass from am_glass_details1_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','amglassdetails.dat','w',1000);
+for u in amglassdetails
+LOOP
+v_amglassdetails:=am_time||','|| id ||','||glass_material||','||shape||','||quantity||','||amount_per_glass;
+UTL_FILE.put_line(v_file,v_amglassdetails);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from am_glass_details1_sa
+END;
+/
+
+amglassdetails.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\amglassdetails.dat'
+BADFILE'C:\MY_DIR\amglassdetails.bad'
+DISCARDFILE'C:\MY_DIR\amglassdetails.dsc'
+APPEND INTO TABLE am_glass_details1_dwh
+FIELDS TERMINATED BY ","
+( am_time,id,glass_material,shape,quantity,amount_per_glass)
+
+/////////////////////////////////////////////////
+create or replace procedure exportGodownPlacement
+is
+v_file UTL_FILE.FILE_TYPE;
+v_godownplacement VARCHAR2(2000);
+CURSOR godownplacement IS
+select gp_time,id,godown_id,gp_date,quantity,glass_material,shape from godown_placement1_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','godownplacement.dat','w',1000);
+for u in godownplacement
+LOOP
+v_godownplacement:=gp_time||','||id||','||godonw_id||','||gp_date||','||quantity||','||glass_material||','||shape;
+UTL_FILE.put_line(v_file,v_godownplacement);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from godown_placement1_sa
+END;
+/
+
+godownplacement.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\godownplacement.dat'
+BADFILE'C:\MY_DIR\godownplacement.bad'
+DISCARDFILE'C:\MY_DIR\godownplacement.dsc'
+APPEND INTO TABLE godown_placement1_dwh
+FIELDS TERMINATED BY ","
+( gp_time,id,godonw_id,gp_date,quantity,glass_material,shape)
+
+//////////////////////////////////////////////////
+create or replace procedure exportGodownStockDetails
+is
+v_file UTL_FILE.FILE_TYPE;
+v_godownstockdetails VARCHAR2(2000);
+CURSOR godownstockdetails IS
+select g_stock_time,godown_id,glass_material,shape,quantity from godown_stock_details1_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','godownstockdetails.dat','w',1000);
+for u in godownstockdetails
+LOOP
+v_godownstockdetails:=gp_time||','||id||','||godonw_id||','||gp_date||','||quantity||','||glass_material||','||shape;
+UTL_FILE.put_line(v_file,v_godownstockdetails);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from godown_stock_details1_sa
+END;
+/
+
+godownstockdetails.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\godownstockdetails.dat'
+BADFILE'C:\MY_DIR\godownstockdetails.bad'
+DISCARDFILE'C:\MY_DIR\godownstockdetails.dsc'
+APPEND INTO TABLE godown_stock_details1_dwh
+FIELDS TERMINATED BY ","
+( g_stock_time,godown_id,glass_material,shape,quantity)
+
+/////////////////////////////////////////////////
+
+create or replace procedure exportShopDetails
+is
+v_file UTL_FILE.FILE_TYPE;
+v_shopdetails VARCHAR2(2000);
+CURSOR shopdetails IS
+select shop_time,shop_id,shop_name,city from shop_details_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','shopdetails.dat','w',1000);
+for u in shopdetails
+LOOP
+v_shopdetails:=shop_time||','||shop_id||','||shop_name||','||city;
+UTL_FILE.put_line(v_file,v_shopdetails);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from shop_details_sa;
+END;
+/
+
+shopdetails.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\shopdetails.dat'
+BADFILE'C:\MY_DIR\shopdetails.bad'
+DISCARDFILE'C:\MY_DIR\shopdetails.dsc'
+APPEND INTO TABLE shop_details_dwh
+FIELDS TERMINATED BY ","
+(shop_time,shop_id,shop_name,city)
+
+///////////////////////////////////
+
+create or replace procedure exportShopArrivalStock
+is
+v_file UTL_FILE.FILE_TYPE;
+v_shoparrivalstock VARCHAR2(2000);
+CURSOR shoparrivalstock IS
+select sas_time,sas_id,shop_id,godown_id,glass_material,shape,quantity,sas_date from shop_arrival_stock1_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','shoparrivalstock.dat','w',1000);
+for u in shoparrivalstock
+LOOP
+v_shoparrivalstock:=sas_time||','||sas_id||','||shop_id||','||godown_id||','||glass_material||','||shape||','||quantity||','||sas_date;
+UTL_FILE.put_line(v_file,v_shoparrivalstock);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from shop_arrival_stock1_sa;
+END;
+/
+
+shoparrivalstock.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\shoparrivalstock.dat'
+BADFILE'C:\MY_DIR\shoparrivalstock.bad'
+DISCARDFILE'C:\MY_DIR\shoparrivalstock.dsc'
+APPEND INTO TABLE shop_arrival_stock1_dwh
+FIELDS TERMINATED BY ","
+( sas_time,sas_id,shop_id,godown_id,glass_material,shape,quantity,sas_date)
+
+//////////////////////////////////////
+create or replace procedure exportShopStockDetails
+is
+v_file UTL_FILE.FILE_TYPE;
+v_shopstockdetails VARCHAR2(2000);
+CURSOR shopstockdetails IS
+select s_stock_time,shop_id,glass_material,shape,quantity,amount_per_glass from shop_stock_details1_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','shopstockdetails.dat','w',1000);
+for u in shopstockdetails
+LOOP
+v_shopstockdetails:=s_stock_time||','||shop_id||','||glass_material||','||shape||','||quantity||','||amount_per_glass;
+UTL_FILE.put_line(v_file,v_shopstockdetails);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from shop_stock_details1_sa;
+END;
+/
+
+shopstockdetails.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\shopstockdetails.dat'
+BADFILE'C:\MY_DIR\shopstockdetails.bad'
+DISCARDFILE'C:\MY_DIR\shopstockdetails.dsc'
+APPEND INTO TABLE shop_stock_details1_dwh
+FIELDS TERMINATED BY ","
+( s_stock_time,shop_id,glass_material,shape,quantity,amount_per_glass)
+
+//////////////////////////////////
+
+create or replace procedure exportConsumer
+is
+v_file UTL_FILE.FILE_TYPE;
+v_consumer VARCHAR2(2000);
+CURSOR consumer IS
+select c_time,order_id,shop_id,glass_material,shape,quantity,amount_per_glass,total_amount,purchase_date from consumer1_sa;
+BEGIN
+v_file:=UTL_FILE.FOPEN('MY_EXPORT','consumer.dat','w',1000);
+for u in consumer
+LOOP
+v_consumer:=c_time||','||order_id||','||shop_id||','||glass_material||','||shape||','||quantity||','||amount_per_glass||','||total_amount||','||purchase_date;
+UTL_FILE.put_line(v_file,v_consumer);
+END LOOP;
+UTL_FILE.FCLOSE(v_file);
+delete from consumer1_sa;
+END;
+/
+
+consumer.ctl
+LOAD DATA
+INFILE'C:\MY_DIR\consumer.dat'
+BADFILE'C:\MY_DIR\consumer.bad'
+DISCARDFILE'C:\MY_DIR\consumer.dsc'
+APPEND INTO TABLE consumer1_dwh
+FIELDS TERMINATED BY ","
+( c_time,order_id,shop_id,glass_material,shape,quantity,amount_per_glass,total_amount,purchase_date)
+

@@ -1,0 +1,140 @@
+CREATE TABLE user_info_dwh(
+u_time timestamp ,
+    user_id int NOT NULL,
+    name VARCHAR2(20),
+    contact_no VARCHAR2(14),
+    is_type VARCHAR2(20),
+primary key(u_time ,user_id ))
+
+create table vendor_main1_dwh(
+v_time timestamp ,
+order_id int not null ,
+vendor_id int not null ,
+purchase_date date not null,
+glass_material varchar2(20) not null ,
+quantity int not null,
+amount_per_glass int not null,
+total_amount int not null,
+primary key(v_time ,order_id ));
+
+create table godown_details_dwh(
+g_time timestamp ,
+godown_id int not null,
+godown_name varchar2(20) not null,
+godown_city varchar2(20) not null,
+primary key(g_time ,godown_id ));
+
+create table bm_glass_details_dwh(
+bm_time timestamp ,  
+glass_material varchar2(20),
+  quantity int,
+amount_per_glass int,
+primary key(bm_time ,glass_material ));
+
+
+alter table bm_glass_details
+add amount_per_glass int;
+
+
+create table glass_manufactured_order_dwh(
+gm_time timestamp ,
+gm_id int not null,
+glass_material varchar2(20) not null,
+shape varchar2(20) not null,
+quantity int not null,
+gm_date date,
+length int,
+width int,
+height int,
+amount_per_glass int,
+primary key(gm_time ,gm_id ));
+
+create table am_glass_details1_dwh(
+am_time timestamp,
+id int not null ,
+glass_material varchar2(20),
+shape varchar2(20),
+quantity int ,
+amount_per_glass int,
+ primary key(am_time ,id ));
+
+
+
+
+create table godown_placement1_dwh(
+gp_time timestamp ,
+id int not null,       
+godown_id int not null ,
+gp_date date,
+quantity int not null,
+glass_material varchar2(20)  not null,
+shape varchar2(20) not null,
+primary key(gp_time ,id )
+);
+
+
+create table godown_stock_details1_dwh(
+g_stock_time timestamp ,
+id int not null,
+      godown_id int not null ,
+      glass_material varchar2(20) not null,
+      shape varchar2(20) not null,
+      quantity int not null,
+primary key(g_stock_time ,id ));
+
+--insert into godown_stock_details1 values(1,'Ceramic','Circle',20);
+
+
+create table shop_details_dwh(
+shop_time timestamp ,
+  shop_id int ,
+  shop_name varchar2(20) not null,
+  city varchar2(20) not null,
+primary key(shop_time ,shop_id ));
+
+
+ create table shop_arrival_stock1_dwh(
+sas_time timestamp ,
+    sas_id int not null,
+    shop_id int not null,
+    godown_id int not null,
+    glass_material varchar2(20) not null,
+    shape varchar2(20)  not null,
+    quantity int not null,
+    sas_date date not null,
+primary key(sas_time ,sas_id ));
+
+
+create table shop_stock_details1_dwh(
+s_stock_time timestamp,
+  shop_id int not null,
+    glass_material varchar2(20) not null,
+    shape varchar2(20) not null,
+    quantity int,
+amount_per_glass int,
+ primary key(s_stock_time ,shop_id,glass_material,shape));
+
+
+create table consumer1_dwh(
+c_time timestamp ,
+order_id int not null,
+shop_id int not null,
+glass_material varchar2(20) not null,
+shape varchar2(20) not null,
+quantity int,
+amount_per_glass int ,
+total_amount int,
+purchase_date date,
+primary key(c_time ,order_id ));
+//////////////////////////////////////////////////////
+
+create or replace directory my_export as 'c:/MY_DIR/';
+
+Directory created.
+
+SQL> grant read,write on directory my_export to staging_area;
+
+Grant succeeded.
+
+SQL> grant read,write on directory my_export to data_warehouse;
+

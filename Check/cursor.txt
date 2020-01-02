@@ -1,0 +1,16 @@
+CREATE OR REPLACE PROCEDURE showOrderDetails
+   is
+   CURSOR abc 
+   is
+   SELECT a.order_id "O_ID",a.user_id "U_ID",b.glasstype "GT" ,b.glassshape "GS",b.glassthickness "GTH",b.glassdimension "GD",a.order_date "OD",d.quantity "Q",d.amount "A"
+   FROM glass_user_order a inner join glass_details b
+   ON a.glass_id=b.glass_id  
+   INNER JOIN glass_price d
+   ON a.price_id=d.price_id AND b.glasstype='Mirror Glass';
+BEGIN
+   dbms_output.put_line(' O_ID     '||'     U_ID  '||'         GT  '||'               GS  '||'   	     GTH  '||'   	    GD  '||' 			OD  '||' 			Q  '||' 		 A  ');
+   for cur in abc
+   LOOP
+      dbms_output.put_line(cur.O_ID||'  		 '|| cur.U_ID||' 	     '|| cur.GT||'   	'|| cur.GS||'   	'|| cur.GTH||'   	'||cur.GD||'   		'|| cur.OD||'  		 '|| cur.Q||'   	'||cur.A);
+   END LOOP;
+END;
