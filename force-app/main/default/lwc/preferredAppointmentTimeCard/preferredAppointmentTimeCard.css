@@ -1,0 +1,25 @@
+.body {
+    padding: 0.75rem 1rem 1rem 1rem;
+}
+
+.row + .row {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #eef0f2;
+}
+
+.label {
+    font-size: 0.75rem;
+    color: #5c5c5c;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+}
+
+.value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1f1f1f;
+    word-break: break-word;
+}
+
