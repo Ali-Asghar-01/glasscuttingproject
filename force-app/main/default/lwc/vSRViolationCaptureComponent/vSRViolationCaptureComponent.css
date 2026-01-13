@@ -244,6 +244,10 @@
     background: #ffffff;
     border-top: 1px solid #eef0f2;
     border-bottom: 1px solid #eef0f2;
+    /* Make each cell a flex container so content truly centers vertically,
+       even when row height is driven by thumbnails. */
+    display: flex;
+    align-items: center;
 }
 
 .uiTable tbody tr td:first-child {
@@ -265,10 +269,10 @@
 .cellMain {
     padding: 0.35rem 0;
     min-width: 0;
-    height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: center; /* vertical center within the row */
+    width: 100%;
 }
 
 .labelText {
@@ -292,8 +296,8 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100%;
     padding-top: 0;
+    width: 100%;
 }
 
 .tightTextarea {
@@ -412,6 +416,12 @@
 .colLabel .cellMain,
 .colDescription .cellMain {
     align-items: flex-start;
+}
+
+/* Ensure file blocks and upload areas expand to cell width */
+.uploadCenter,
+.fileBlock {
+    width: 100%;
 }
 
 .removeBtn {
