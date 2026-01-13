@@ -1,0 +1,27 @@
+<template>
+    <lightning-modal-header label="Violation Capture" onclose={handleHeaderClose}></lightning-modal-header>
+
+    <lightning-modal-body class="modalBody">
+        <c-v-s-r-violation-capture-component
+            record-id={recordId}
+            onclose={handleClose}
+            onsubmitted={handleSubmitted}>
+        </c-v-s-r-violation-capture-component>
+    </lightning-modal-body>
+
+    <lightning-modal-footer>
+        <lightning-button
+            variant="brand"
+            label="Submit"
+            onclick={handleSubmitClick}
+            style="padding-right: 10px;">
+        </lightning-button>
+
+        <lightning-button
+            variant="neutral"
+            label="Close"
+            onclick={handleClose}>
+        </lightning-button>
+    </lightning-modal-footer>
+</template>
+
