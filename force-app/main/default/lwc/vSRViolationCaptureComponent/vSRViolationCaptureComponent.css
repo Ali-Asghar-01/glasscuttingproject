@@ -235,8 +235,24 @@
     border-spacing: 0 0.75rem;
 }
 
+.uiTable th,
+.uiTable td {
+    box-sizing: border-box;
+}
+
 .uiTable thead th {
     background: #fbfbfb;
+    vertical-align: middle;
+}
+
+.uiTable thead th:first-child {
+    /* keep header aligned with body "card row" left border */
+    border-left: 1px solid transparent;
+}
+
+.uiTable thead th:last-child {
+    /* keep header aligned with body "card row" right border */
+    border-right: 1px solid transparent;
 }
 
 .uiTable tbody td {
@@ -443,6 +459,27 @@
 
 .villaRight {
     flex: 0 0 auto;
+}
+
+/* Villa section should stay left-aligned (like before) */
+.villaLeft .uploadCenter {
+    justify-content: flex-start;
+}
+
+.villaLeft .fileBlock {
+    align-items: flex-start;
+}
+
+.villaLeft .thumbWrap {
+    justify-content: flex-start;
+}
+
+.villaLeft .fileMetaRow {
+    justify-content: flex-start;
+}
+
+.villaLeft .fileName {
+    text-align: left;
 }
 
 /* Mobile responsiveness */
