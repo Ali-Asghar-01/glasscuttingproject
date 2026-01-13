@@ -3,6 +3,7 @@ import { api } from 'lwc';
 
 export default class VsrViolationCaptureModal extends LightningModal {
     @api recordId;
+    @api vsrId;
 
     handleHeaderClose() {
         this._closeAndHardRefresh({ action: 'close' });

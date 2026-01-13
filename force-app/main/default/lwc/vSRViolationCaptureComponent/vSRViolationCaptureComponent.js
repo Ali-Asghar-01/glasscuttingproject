@@ -4,10 +4,11 @@ import { NavigationMixin } from 'lightning/navigation';
 import { notifyRecordUpdateAvailable } from 'lightning/uiRecordApi';
 
 import getVSRViolationRecords from '@salesforce/apex/vSRViolationCaptureController.getVSRViolationRecords';
-import getExistingVSRWithViolations from '@salesforce/apex/vSRViolationCaptureController.getExistingVSRWithViolations';
+import getVsrContext from '@salesforce/apex/vSRViolationCaptureController.getVsrContext';
+import initVsrForModal from '@salesforce/apex/vSRViolationCaptureController.initVsrForModal';
 import submitVSR from '@salesforce/apex/vSRViolationCaptureController.submitVSR';
 
-import createViolationDocument from '@salesforce/apex/vSRViolationCaptureController.createViolationDocument';
+import createViolationForVsr from '@salesforce/apex/vSRViolationCaptureController.createViolationForVsr';
 import updateViolationDocumentAfterUpload from '@salesforce/apex/vSRViolationCaptureController.updateViolationDocumentAfterUpload';
 
 import createVillaPictureDocument from '@salesforce/apex/vSRViolationCaptureController.createVillaPictureDocument';
@@ -21,6 +22,7 @@ import clearDocumentFile from '@salesforce/apex/vSRViolationCaptureController.cl
 
 export default class VSRViolationCaptureComponent extends NavigationMixin(LightningElement) {
     @api recordId;
+    @api vsrId; // passed from launcher/modal (created on action invoke)
 
     // Metadata
     violations = [];
@@ -107,6 +109,10 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
     async init() {
         this.isLoading = true;
         try {
+            // Safety: if launcher didn't pass vsrId for any reason, create/reuse it here.
+            if (!this.vsrId) {
+                this.vsrId = await initVsrForModal({ caseId: this.recordId });
+            }
             await this.loadViolations();
             await this.loadExistingVsrRows();
             await this.initVillaPicture();
@@ -283,7 +289,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
     // ---------------------------
     async loadExistingVsrRows() {
         try {
-            const jsonStr = await getExistingVSRWithViolations({ caseId: this.recordId });
+            const jsonStr = await getVsrContext({ caseId: this.recordId, vsrId: this.vsrId });
             const data = JSON.parse(jsonStr || '{}');
 
             this.isParentMode = !!data.isFollowUp;
@@ -308,13 +314,14 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             }
 
             if (!data.hasVsr) {
-                this.vsrId = null;
+                // Should not happen after initVsrForModal, but keep defensive behavior.
                 this.rows = [];
                 this.applyViolationFilter();
                 return;
             }
 
-            this.vsrId = data.vsrId;
+            // IMPORTANT: controller returns current-case VSR Id (the one user is editing)
+            this.vsrId = data.vsrId || this.vsrId;
 
             const loadedRows = (data.rows || []).map(r => {
                 const name = r.name || '';
@@ -495,12 +502,22 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             this.isAddInProgress = true;
             this._beginWork();
             try {
-                const documentId = await createViolationDocument({ caseId: this.recordId });
+                const resp = await createViolationForVsr({
+                    caseId: this.recordId,
+                    vsrId: this.vsrId,
+                    heading: violation.name,
+                    category: isOther ? '' : violation.category,
+                    description: isOther ? '' : violation.description,
+                    isParentMode: true
+                });
+                const violationId = resp?.violationId || resp?.violationid || null;
+                const documentId = resp?.documentId || resp?.documentid || null;
 
                 this.rows = (this.rows || []).map(r => {
                     if (r.rowId !== rowId) return r;
                     const updated = {
                         ...r,
+                        violationRecordId: violationId,
                         beforeDocumentId: documentId,
                         isBeforeDocNotReady: !documentId,
                         isBeforeDocCreating: false
@@ -550,12 +567,22 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             this.isAddInProgress = true;
             this._beginWork();
             try {
-                const documentId = await createViolationDocument({ caseId: this.recordId });
+                const resp = await createViolationForVsr({
+                    caseId: this.recordId,
+                    vsrId: this.vsrId,
+                    heading: violation.name,
+                    category: isOther ? '' : violation.category,
+                    description: isOther ? '' : violation.description,
+                    isParentMode: false
+                });
+                const violationId = resp?.violationId || resp?.violationid || null;
+                const documentId = resp?.documentId || resp?.documentid || null;
 
                 this.rows = (this.rows || []).map(r => {
                     if (r.rowId !== rowId) return r;
                     return {
                         ...r,
+                        violationRecordId: violationId,
                         documentId,
                         isDocNotReady: !documentId,
                         isDocCreating: false
@@ -589,7 +616,11 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         if (this.isParentMode) {
             if (row?.violationRecordId) this.pendingDeleteViolationIds.add(row.violationRecordId);
             if (row?.afterDocumentId) this.pendingDeleteDocumentIds.add(row.afterDocumentId);
-            if (row?.beforeDocumentId) this.pendingDeleteDocumentIds.add(row.beforeDocumentId);
+            // IMPORTANT: never delete parent-case "Before" docs from a carried-forward baseline row.
+            // Only delete the BEFORE placeholder when the row is new-in-follow-up (current case).
+            if (row?.isNewInFollowUp && row?.beforeDocumentId) {
+                this.pendingDeleteDocumentIds.add(row.beforeDocumentId);
+            }
         } else {
             if (row?.violationRecordId) this.pendingDeleteViolationIds.add(row.violationRecordId);
             if (row?.documentId) this.pendingDeleteDocumentIds.add(row.documentId);
@@ -1056,6 +1087,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
 
             const savedVsrId = await submitVSR({
                 caseId: this.recordId,
+                vsrId: this.vsrId,
                 rowsJson: JSON.stringify(payloadRows),
                 villaDocumentId: this.villaDocumentId,
                 deletedViolationIdsJson,
