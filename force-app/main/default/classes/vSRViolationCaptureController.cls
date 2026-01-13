@@ -570,8 +570,9 @@ public with sharing class vSRViolationCaptureController {
 
                         if (isCarriedForward) {
                             if (!String.isBlank(beforeCdId)) {
+                                String baseName = String.isBlank(beforeName) ? 'Before photo' : beforeName;
                                 beforeDocsToInsert.add(new Documents__c(
-                                    Name = String.isBlank(beforeName) ? 'Before photo' : beforeName,
+                                    Name = buildDocumentDisplayName(baseName, 'VSR Violation Before Evidence'),
                                     Document_Type__c = 'VSR Violation Before Evidence',
                                     Status__c = 'Submitted',
                                     Is_Customer_Doc__c = true,
@@ -651,7 +652,7 @@ public with sharing class vSRViolationCaptureController {
 
         try {
             Documents__c doc = [
-                SELECT Id, AttachmentID__c, Violation__c, Document_Type__c
+                SELECT Id, Name, AttachmentID__c, Violation__c, Document_Type__c
                 FROM Documents__c
                 WHERE Id = :documentId
                 LIMIT 1
@@ -671,9 +672,21 @@ public with sharing class vSRViolationCaptureController {
 
             Id oldCdId = (Id) doc.AttachmentID__c;
 
+            // Rename document when file is attached:
+            // "<file name without extension> - <Document_Type__c>"
+            // NOTE: preserve special key-based placeholder Names that are queried by Name (do NOT rename):
+            // - VILLA_PIC|<caseId>
+            // - VSR_AFTER|<caseId>|<sourceViolationId>
+            Boolean preserveKeyName = !String.isBlank(doc.Name)
+                && (doc.Name.startsWith('VILLA_PIC|') || doc.Name.startsWith('VSR_AFTER|'));
+
+            String newName = preserveKeyName
+                ? doc.Name
+                : buildDocumentDisplayName(fileName, doc.Document_Type__c);
+
             update new Documents__c(
                 Id = doc.Id,
-                Name = fileName,
+                Name = newName,
                 Status__c = 'Submitted',
                 Is_Customer_Doc__c = true,
                 Mandatory__c = true,
@@ -1076,6 +1089,28 @@ public with sharing class vSRViolationCaptureController {
         Boolean hasBeforeBaseline = !String.isBlank(beforeCd);
         Boolean hasSource = (srcVal != null && String.valueOf(srcVal).trim() != '');
         return hasBeforeBaseline || hasSource;
+    }
+
+    /**
+     * Documents__c.Name = "<file name without extension> - <Document Type>"
+     * (No extension; includes Document_Type__c for clarity.)
+     */
+    private static String buildDocumentDisplayName(String fileName, String documentType) {
+        String base = stripExtension(fileName);
+        if (String.isBlank(base)) base = 'File';
+
+        String dt = String.isBlank(documentType) ? '' : documentType.trim();
+        if (String.isBlank(dt)) return base;
+
+        return base + ' - ' + dt;
+    }
+
+    private static String stripExtension(String fileName) {
+        if (String.isBlank(fileName)) return null;
+        String f = fileName.trim();
+        Integer dot = f.lastIndexOf('.');
+        if (dot <= 0 || dot == f.length() - 1) return f;
+        return f.substring(0, dot);
     }
 
     private static void removeOtherFilesFromEntities(Set<Id> linkedEntityIds, Id keepContentDocumentId) {
