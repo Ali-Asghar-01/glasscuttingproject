@@ -1425,17 +1425,8 @@ public with sharing class vSRViolationCaptureController {
             }
         }
 
-        List<Documents__c> anyLatest = [
-            SELECT Id, AttachmentID__c
-            FROM Documents__c
-            WHERE Document_Type__c = 'Villa Picture'
-            ORDER BY Id DESC
-            LIMIT 1
-        ];
-        if (!anyLatest.isEmpty()) {
-            try { return (Id) anyLatest[0].AttachmentID__c; } catch (Exception ignore) {}
-        }
-
+        // IMPORTANT: No unscoped fallback query here.
+        // We must never return a "random" villa picture from another case.
         return null;
     }
 
