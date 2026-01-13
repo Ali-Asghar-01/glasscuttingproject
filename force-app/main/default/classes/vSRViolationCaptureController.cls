@@ -746,19 +746,6 @@ public with sharing class vSRViolationCaptureController {
         return vsr.Id;
     }
 
-    // Backward compatible submit signature (older UI)
-    @AuraEnabled
-    public static Id submitVSR(
-        Id caseId,
-        String rowsJson,
-        Id villaDocumentId,
-        String deletedViolationIdsJson,
-        String deletedDocumentIdsJson
-    ) {
-        Id resolvedVsrId = initVsrForModal(caseId);
-        return submitVSR(caseId, resolvedVsrId, rowsJson, villaDocumentId, deletedViolationIdsJson, deletedDocumentIdsJson);
-    }
-
     // ============================================================
     // DOCUMENT PLACEHOLDERS / UPLOAD HOOKS
     // (kept for existing UI behavior; createViolationForVsr is preferred for new rows)
