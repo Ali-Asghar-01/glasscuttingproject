@@ -108,12 +108,15 @@
 
                                     <div class="fileMetaRow fileMeta">
                                         <div class="fileName textWrap">
-                                            <span class="muted">Uploaded:</span> {villaFilesSummary}
+                                            <span class="muted">Uploaded:</span>
+                                            <template if:true={villaFileUrl}>
+                                                <a class="fileLink" href={villaFileUrl} target="_blank">{villaFilesSummary}</a>
+                                            </template>
+                                            <template if:false={villaFileUrl}>
+                                                <span>{villaFilesSummary}</span>
+                                            </template>
                                         </div>
                                         <div class="fileActions">
-                                            <template if:true={villaFileUrl}>
-                                                <a href={villaFileUrl} target="_blank">View</a>
-                                            </template>
                                             <lightning-button-icon
                                                 class="removeBtn"
                                                 icon-name="utility:close"
@@ -257,11 +260,15 @@
                                                                 </template>
 
                                                                 <div class="fileMetaRow fileMeta">
-                                                                    <div class="fileName textWrap">{row.beforeFilesSummary}</div>
-                                                                    <div class="fileActions">
+                                                                    <div class="fileName textWrap">
                                                                         <template if:true={row.beforeFileUrl}>
-                                                                            <a href={row.beforeFileUrl} target="_blank">View</a>
+                                                                            <a class="fileLink" href={row.beforeFileUrl} target="_blank">{row.beforeFilesSummary}</a>
                                                                         </template>
+                                                                        <template if:false={row.beforeFileUrl}>
+                                                                            <span>{row.beforeFilesSummary}</span>
+                                                                        </template>
+                                                                    </div>
+                                                                    <div class="fileActions">
                                                                         <lightning-button-icon
                                                                             class="removeBtn"
                                                                             icon-name="utility:close"
@@ -286,10 +293,12 @@
                                                                     </div>
                                                                 </template>
                                                                 <div class="fileMetaRow fileMeta">
-                                                                    <div class="fileName textWrap">{row.beforeFilesSummary}</div>
-                                                                    <div class="fileActions">
+                                                                    <div class="fileName textWrap">
                                                                         <template if:true={row.beforeFileUrl}>
-                                                                            <a href={row.beforeFileUrl} target="_blank">View</a>
+                                                                            <a class="fileLink" href={row.beforeFileUrl} target="_blank">{row.beforeFilesSummary}</a>
+                                                                        </template>
+                                                                        <template if:false={row.beforeFileUrl}>
+                                                                            <span>{row.beforeFilesSummary}</span>
                                                                         </template>
                                                                     </div>
                                                                 </div>
@@ -344,11 +353,15 @@
                                                                 </template>
 
                                                                 <div class="fileMetaRow fileMeta">
-                                                                    <div class="fileName textWrap">{row.afterFilesSummary}</div>
-                                                                    <div class="fileActions">
+                                                                    <div class="fileName textWrap">
                                                                         <template if:true={row.afterFileUrl}>
-                                                                            <a href={row.afterFileUrl} target="_blank">View</a>
+                                                                            <a class="fileLink" href={row.afterFileUrl} target="_blank">{row.afterFilesSummary}</a>
                                                                         </template>
+                                                                        <template if:false={row.afterFileUrl}>
+                                                                            <span>{row.afterFilesSummary}</span>
+                                                                        </template>
+                                                                    </div>
+                                                                    <div class="fileActions">
                                                                         <lightning-button-icon
                                                                             class="removeBtn"
                                                                             icon-name="utility:close"
@@ -432,11 +445,15 @@
                                                             </template>
 
                                                             <div class="fileMetaRow fileMeta">
-                                                                <div class="fileName textWrap">{row.filesSummary}</div>
-                                                                <div class="fileActions">
+                                                                <div class="fileName textWrap">
                                                                     <template if:true={row.fileUrl}>
-                                                                        <a href={row.fileUrl} target="_blank">View</a>
+                                                                        <a class="fileLink" href={row.fileUrl} target="_blank">{row.filesSummary}</a>
                                                                     </template>
+                                                                    <template if:false={row.fileUrl}>
+                                                                        <span>{row.filesSummary}</span>
+                                                                    </template>
+                                                                </div>
+                                                                <div class="fileActions">
                                                                     <lightning-button-icon
                                                                         class="removeBtn"
                                                                         icon-name="utility:close"

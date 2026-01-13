@@ -411,6 +411,17 @@
     margin-left: 0.5rem; /* space after filename */
 }
 
+.fileLink {
+    margin-left: 0.35rem;
+    color: #0176d3;
+    text-decoration: none;
+}
+
+.fileLink:hover,
+.fileLink:focus {
+    text-decoration: underline;
+}
+
 /* Center the upload control when no file exists */
 .uploadCenter {
     width: 100%;
