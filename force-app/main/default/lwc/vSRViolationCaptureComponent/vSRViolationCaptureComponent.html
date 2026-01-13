@@ -83,11 +83,13 @@
                     <div class="villaRow">
                         <div class="villaLeft">
                             <template if:false={villaFiles.length}>
-                                <lightning-file-upload
-                                    record-id={villaDocumentId}
-                                    accept={acceptedFormats}
-                                    onuploadfinished={handleVillaUploadFinished}>
-                                </lightning-file-upload>
+                                <div class="uploadCenter">
+                                    <lightning-file-upload
+                                        record-id={villaDocumentId}
+                                        accept={acceptedFormats}
+                                        onuploadfinished={handleVillaUploadFinished}>
+                                    </lightning-file-upload>
+                                </div>
                             </template>
 
                             <template if:true={villaFileError}>
@@ -231,13 +233,15 @@
                                                 <div class="cellMain">
                                                     <template if:true={row.isNewInFollowUp}>
                                                         <template if:false={row.beforeFiles.length}>
-                                                            <lightning-file-upload
-                                                                record-id={row.beforeDocumentId}
-                                                                accept={acceptedFormats}
-                                                                onuploadfinished={handleBeforeUploadFinished}
-                                                                data-rowid={row.rowId}
-                                                                disabled={row.isBeforeUploadDisabled}>
-                                                            </lightning-file-upload>
+                                                            <div class="uploadCenter">
+                                                                <lightning-file-upload
+                                                                    record-id={row.beforeDocumentId}
+                                                                    accept={acceptedFormats}
+                                                                    onuploadfinished={handleBeforeUploadFinished}
+                                                                    data-rowid={row.rowId}
+                                                                    disabled={row.isBeforeUploadDisabled}>
+                                                                </lightning-file-upload>
+                                                            </div>
                                                         </template>
 
                                                         <template if:true={row.beforeUploadError}>
@@ -308,20 +312,22 @@
 
                                                     <template if:false={row.isNewInFollowUp}>
                                                         <template if:true={row.isAfterDocCreating}>
-                                                            <div class="slds-is-relative" style="min-height: 2.5rem;">
+                                                            <div class="uploadCenter slds-is-relative" style="min-height: 2.5rem;">
                                                                 <lightning-spinner alternative-text="Preparing upload..." size="small"></lightning-spinner>
                                                             </div>
                                                         </template>
 
                                                         <template if:false={row.isAfterDocCreating}>
                                                             <template if:false={row.afterFiles.length}>
-                                                                <lightning-file-upload
-                                                                    record-id={row.afterDocumentId}
-                                                                    accept={acceptedFormats}
-                                                                    onuploadfinished={handleAfterUploadFinished}
-                                                                    data-rowid={row.rowId}
-                                                                    disabled={row.isAfterUploadDisabled}>
-                                                                </lightning-file-upload>
+                                                                <div class="uploadCenter">
+                                                                    <lightning-file-upload
+                                                                        record-id={row.afterDocumentId}
+                                                                        accept={acceptedFormats}
+                                                                        onuploadfinished={handleAfterUploadFinished}
+                                                                        data-rowid={row.rowId}
+                                                                        disabled={row.isAfterUploadDisabled}>
+                                                                    </lightning-file-upload>
+                                                                </div>
                                                             </template>
                                                         </template>
 
@@ -393,19 +399,21 @@
                                             <td data-label="Evidence" class="colEvidence">
                                                 <div class="cellMain">
                                                     <template if:true={row.isDocCreating}>
-                                                        <div class="slds-is-relative" style="min-height: 2.5rem;">
+                                                        <div class="uploadCenter slds-is-relative" style="min-height: 2.5rem;">
                                                             <lightning-spinner alternative-text="Preparing upload..." size="small"></lightning-spinner>
                                                         </div>
                                                     </template>
                                                     <template if:false={row.isDocCreating}>
                                                         <template if:false={row.files.length}>
-                                                            <lightning-file-upload
-                                                                record-id={row.documentId}
-                                                                accept={acceptedFormats}
-                                                                onuploadfinished={handleUploadFinished}
-                                                                data-rowid={row.rowId}
-                                                                disabled={row.isDocNotReady}>
-                                                            </lightning-file-upload>
+                                                            <div class="uploadCenter">
+                                                                <lightning-file-upload
+                                                                    record-id={row.documentId}
+                                                                    accept={acceptedFormats}
+                                                                    onuploadfinished={handleUploadFinished}
+                                                                    data-rowid={row.rowId}
+                                                                    disabled={row.isDocNotReady}>
+                                                                </lightning-file-upload>
+                                                            </div>
                                                         </template>
                                                     </template>
 
