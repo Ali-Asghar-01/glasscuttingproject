@@ -419,8 +419,7 @@
     align-items: center;
 }
 
-/* Center inputs/controls in their narrow columns */
-.colCategory .cellMain,
+/* Center inputs/controls in their narrow columns (Fixed stays centered) */
 .colFixed .cellMain {
     align-items: center;
 }
@@ -435,6 +434,55 @@
 .uploadCenter,
 .fileBlock {
     width: 100%;
+}
+
+/* ------------------------------------------------------------
+   Column alignment: make Category/Before/After/Evidence content
+   start under the header (not centered in the cell).
+------------------------------------------------------------ */
+.colCategory .cellMain {
+    align-items: flex-start;
+}
+
+.colCategory lightning-combobox {
+    width: 100%;
+}
+
+.colBefore .uploadCenter,
+.colAfter .uploadCenter,
+.colEvidence .uploadCenter {
+    justify-content: flex-start;
+}
+
+.colBefore .fileBlock,
+.colAfter .fileBlock,
+.colEvidence .fileBlock {
+    align-items: flex-start;
+}
+
+.colBefore .thumbWrap,
+.colAfter .thumbWrap,
+.colEvidence .thumbWrap {
+    justify-content: flex-start;
+}
+
+.colBefore .fileMetaRow,
+.colAfter .fileMetaRow,
+.colEvidence .fileMetaRow {
+    justify-content: flex-start;
+}
+
+.colBefore .fileName,
+.colAfter .fileName,
+.colEvidence .fileName {
+    text-align: left;
+}
+
+.colBefore .slds-truncate,
+.colAfter .slds-truncate,
+.colEvidence .slds-truncate,
+.colCategory .slds-truncate {
+    text-align: left;
 }
 
 .removeBtn {
