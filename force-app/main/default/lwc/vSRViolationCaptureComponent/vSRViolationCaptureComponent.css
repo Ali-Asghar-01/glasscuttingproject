@@ -245,22 +245,6 @@
     vertical-align: middle;
 }
 
-/* Center-align specific headers */
-.uiTable thead th.colCategory,
-.uiTable thead th.colBefore,
-.uiTable thead th.colAfter,
-.uiTable thead th.colEvidence {
-    text-align: center;
-}
-
-.uiTable thead th.colCategory .slds-truncate,
-.uiTable thead th.colBefore .slds-truncate,
-.uiTable thead th.colAfter .slds-truncate,
-.uiTable thead th.colEvidence .slds-truncate {
-    text-align: center;
-    width: 100%;
-}
-
 .uiTable thead th:first-child {
     /* keep header aligned with body "card row" left border */
     border-left: 1px solid transparent;
