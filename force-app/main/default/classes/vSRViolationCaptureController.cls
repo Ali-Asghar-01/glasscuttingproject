@@ -710,8 +710,9 @@ public with sharing class vSRViolationCaptureController {
                     // 1) NEW Before doc under child violation referencing parent's ContentDocument
                     // 2) Existing After placeholder linked to child violation
                     if (!String.isBlank(beforeCdId)) {
+                        String baseName = String.isBlank(beforeName) ? 'Before photo' : beforeName;
                         beforeDocsToInsert.add(new Documents__c(
-                            Name = String.isBlank(beforeName) ? 'Before photo' : beforeName,
+                            Name = buildDocumentDisplayName(baseName, 'VSR Violation Before Evidence'),
                             Document_Type__c = 'VSR Violation Before Evidence',
                             Status__c = 'Submitted',
                             Is_Customer_Doc__c = true,
@@ -773,7 +774,7 @@ public with sharing class vSRViolationCaptureController {
 
         try {
             Documents__c doc = [
-                SELECT Id, AttachmentID__c, Violation__c, Document_Type__c
+                SELECT Id, AttachmentID__c, Violation__c, Document_Type__c, Name
                 FROM Documents__c
                 WHERE Id = :documentId
                 LIMIT 1
@@ -797,9 +798,22 @@ public with sharing class vSRViolationCaptureController {
                 try { oldCdId = (Id) doc.AttachmentID__c; } catch (Exception ignore) {}
             }
 
+            // IMPORTANT:
+            // Some Documents__c are created with deterministic keys in Name and later looked up by Name.
+            // Do NOT overwrite those Names with the uploaded file name:
+            // - After placeholders: Name = 'VSR_AFTER|<caseId>|<sourceViolationId>'
+            // - Villa placeholders: Name = 'VILLA_PIC|<caseId>'
+            Boolean preserveKeyName =
+                (doc.Name != null) &&
+                (doc.Name.startsWith('VSR_AFTER|') || doc.Name.startsWith('VILLA_PIC|'));
+
+            String computedName = preserveKeyName
+                ? doc.Name
+                : buildDocumentDisplayName(fileName, doc.Document_Type__c);
+
             update new Documents__c(
                 Id = doc.Id,
-                Name = fileName,
+                Name = computedName,
                 Status__c = 'Submitted',
                 Is_Customer_Doc__c = true,
                 Mandatory__c = true,
@@ -1206,6 +1220,28 @@ public with sharing class vSRViolationCaptureController {
         Boolean hasBeforeBaseline = !String.isBlank(beforeCd);
         Boolean hasSource = (srcVal != null && String.valueOf(srcVal).trim() != '');
         return hasBeforeBaseline || hasSource;
+    }
+
+    /**
+     * Documents__c.Name = "<file name without extension> - <Document Type>".
+     * (No extension; includes Document_Type__c for clarity.)
+     */
+    private static String buildDocumentDisplayName(String fileName, String documentType) {
+        String base = stripExtension(fileName);
+        if (String.isBlank(base)) base = 'File';
+
+        String dt = String.isBlank(documentType) ? '' : documentType.trim();
+        if (String.isBlank(dt)) return base;
+
+        return base + ' - ' + dt;
+    }
+
+    private static String stripExtension(String fileName) {
+        if (String.isBlank(fileName)) return null;
+        String f = fileName.trim();
+        Integer dot = f.lastIndexOf('.');
+        if (dot <= 0 || dot == f.length() - 1) return f;
+        return f.substring(0, dot);
     }
 
     // Prefer a doc that has a file; if tie, lowest Id wins (deterministic).
