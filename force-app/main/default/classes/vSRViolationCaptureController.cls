@@ -733,6 +733,26 @@ public with sharing class vSRViolationCaptureController {
             safeEnsureLink(doc.Id, newCdId);
             removeOtherFilesFromEntities(new Set<Id>{ doc.Id }, newCdId);
 
+            // IMPORTANT:
+            // In this design, files are uploaded against the VSR (firstPublishLocationId),
+            // then re-linked to the Documents__c record. We do NOT want violation files
+            // to remain attached to the VSR record.
+            if (doc.Violation__c != null) {
+                try {
+                    Id vsrId = [
+                        SELECT VSR__c
+                        FROM Violation__c
+                        WHERE Id = :doc.Violation__c
+                        LIMIT 1
+                    ].VSR__c;
+                    if (vsrId != null) {
+                        deleteContentDocumentLinkIfExists(vsrId, newCdId);
+                    }
+                } catch (Exception ignore) {
+                    // best-effort
+                }
+            }
+
             if (oldCdId != null && oldCdId != newCdId) {
                 safeDeleteFileHard(oldCdId);
             }
@@ -1342,6 +1362,25 @@ public with sharing class vSRViolationCaptureController {
         Integer dot = f.lastIndexOf('.');
         if (dot <= 0 || dot == f.length() - 1) return f;
         return f.substring(0, dot);
+    }
+
+    // Remove a specific file link from a specific entity (best-effort).
+    // Used to ensure violation uploads do not remain linked to the VSR record.
+    private static void deleteContentDocumentLinkIfExists(Id linkedEntityId, Id contentDocumentId) {
+        if (linkedEntityId == null || contentDocumentId == null) return;
+        try {
+            List<ContentDocumentLink> links = [
+                SELECT Id
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :linkedEntityId
+                AND ContentDocumentId = :contentDocumentId
+            ];
+            if (!links.isEmpty()) {
+                Database.delete(links, false);
+            }
+        } catch (Exception ignore) {
+            // ignore
+        }
     }
 
     private static void removeOtherFilesFromEntities(Set<Id> linkedEntityIds, Id keepContentDocumentId) {
