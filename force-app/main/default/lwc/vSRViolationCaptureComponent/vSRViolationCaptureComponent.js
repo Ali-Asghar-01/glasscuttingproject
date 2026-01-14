@@ -7,10 +7,13 @@ import getVSRViolationRecords from '@salesforce/apex/vSRViolationCaptureControll
 import getExistingVSRWithViolations from '@salesforce/apex/vSRViolationCaptureController.getExistingVSRWithViolations';
 import submitVSR from '@salesforce/apex/vSRViolationCaptureController.submitVSR';
 
-import createViolationDocument from '@salesforce/apex/vSRViolationCaptureController.createViolationDocument';
+import ensureVsrForCase from '@salesforce/apex/vSRViolationCaptureController.ensureVsrForCase';
+import createViolationAndAttachDocument from '@salesforce/apex/vSRViolationCaptureController.createViolationAndAttachDocument';
+import createCarriedForwardViolationAndAttachAfter from '@salesforce/apex/vSRViolationCaptureController.createCarriedForwardViolationAndAttachAfter';
+import deleteViolationAndFiles from '@salesforce/apex/vSRViolationCaptureController.deleteViolationAndFiles';
 import updateViolationDocumentAfterUpload from '@salesforce/apex/vSRViolationCaptureController.updateViolationDocumentAfterUpload';
 
-import createVillaPictureDocument from '@salesforce/apex/vSRViolationCaptureController.createVillaPictureDocument';
+import upsertVillaAndAttach from '@salesforce/apex/vSRViolationCaptureController.upsertVillaAndAttach';
 import updateVillaPictureAfterUpload from '@salesforce/apex/vSRViolationCaptureController.updateVillaPictureAfterUpload';
 
 import getOrCreateAfterPhotoDocuments from '@salesforce/apex/vSRViolationCaptureController.getOrCreateAfterPhotoDocuments';
@@ -64,9 +67,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
     villaFileError = false;
     villaFileErrorMessage = '';
 
-    // Pending deletes (rows)
-    pendingDeleteViolationIds = new Set();
-    pendingDeleteDocumentIds = new Set();
+    // Pending deletes removed (we delete immediately on row delete)
 
     // Upload formats
     acceptedFormats = ['.png', '.jpg', '.jpeg', '.mp4', '.mov'];
@@ -107,9 +108,10 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
     async init() {
         this.isLoading = true;
         try {
+            // Ensure a single draft VSR exists for this Case (Status/Issued date remain null)
+            this.vsrId = await ensureVsrForCase({ caseId: this.recordId });
             await this.loadViolations();
             await this.loadExistingVsrRows();
-            await this.initVillaPicture();
             await this.hydrateAllThumbnails();
         } catch (e) {
             // eslint-disable-next-line no-console
@@ -343,6 +345,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                         isOther,
 
                         isCarriedForward,
+                        isParentBaselineRow: !!r.isParentBaselineRow,
                         isFixedOnLoad,
                         isFixed: !!r.isFixed,
 
@@ -364,7 +367,8 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                         isCategoryDisabled: false,
                         isBeforeDocNotReady: false,
                         isBeforeDocCreating: false,
-                        isAfterDocNotReady: !afterDocId,
+                        // After upload can be done even without an afterDocumentId in baseline mode (we create records on upload)
+                        isAfterDocNotReady: false,
                         isAfterDocCreating: false,
                         beforeUploadError: false,
                         beforeUploadErrorMessage: '',
@@ -404,10 +408,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
 
             this.rows = loadedRows;
 
-            if (this.isParentMode && this.rows.length) {
-                await this.ensureAfterDocsForRows();
-                this.rows = (this.rows || []).map(x => this.deriveRowState(x));
-            }
+            // No placeholder creation on load; baseline rows create records on first upload.
 
             this.showViolationDropdown = false;
             this.highlightedIndex = -1;
@@ -479,9 +480,10 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                 afterThumbUrl: null,
 
                 isCategoryDisabled: false,
-                isBeforeDocNotReady: true,
-                isBeforeDocCreating: true,
-                isAfterDocNotReady: true,
+                // no placeholder docs on Add
+                isBeforeDocNotReady: false,
+                isBeforeDocCreating: false,
+                isAfterDocNotReady: false,
                 isAfterDocCreating: false,
 
                 beforeUploadError: false,
@@ -491,34 +493,6 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             });
 
             this.rows = [...this.rows, row];
-
-            this.isAddInProgress = true;
-            this._beginWork();
-            try {
-                const documentId = await createViolationDocument({ caseId: this.recordId });
-
-                this.rows = (this.rows || []).map(r => {
-                    if (r.rowId !== rowId) return r;
-                    const updated = {
-                        ...r,
-                        beforeDocumentId: documentId,
-                        isBeforeDocNotReady: !documentId,
-                        isBeforeDocCreating: false
-                    };
-                    return this.deriveRowState(updated);
-                });
-
-            } catch (e) {
-                this.rows = (this.rows || []).filter(r => r.rowId !== rowId);
-                this.dispatchEvent(new ShowToastEvent({
-                    title: 'Document creation failed',
-                    message: this.reduceError(e),
-                    variant: 'error'
-                }));
-            } finally {
-                this._endWork();
-                this.isAddInProgress = false;
-            }
 
         } else {
             const row = {
@@ -538,61 +512,39 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                 fileError: false,
                 fileErrorMessage: '',
 
-                isDocNotReady: true,
-                isDocCreating: true,
+                // no placeholder docs on Add
+                isDocNotReady: false,
+                isDocCreating: false,
 
                 isFixed: false,
                 isCategoryDisabled: false
             };
 
             this.rows = [...this.rows, row];
-
-            this.isAddInProgress = true;
-            this._beginWork();
-            try {
-                const documentId = await createViolationDocument({ caseId: this.recordId });
-
-                this.rows = (this.rows || []).map(r => {
-                    if (r.rowId !== rowId) return r;
-                    return {
-                        ...r,
-                        documentId,
-                        isDocNotReady: !documentId,
-                        isDocCreating: false
-                    };
-                });
-
-            } catch (e) {
-                this.rows = (this.rows || []).filter(r => r.rowId !== rowId);
-                this.dispatchEvent(new ShowToastEvent({
-                    title: 'Document creation failed',
-                    message: this.reduceError(e),
-                    variant: 'error'
-                }));
-            } finally {
-                this._endWork();
-                this.isAddInProgress = false;
-            }
         }
     }
 
     // ---------------------------
     // Deletes (rows)
     // ---------------------------
-    handleDeleteRow(event) {
+    async handleDeleteRow(event) {
         const rowId = event.currentTarget.dataset.rowid;
         const row = (this.rows || []).find(r => r.rowId === rowId);
         if (!row) return;
 
-        if (this.isParentMode && row.isRowDisabled) return;
+        if (this.isParentMode && row.isDeleteDisabledFinal) return;
 
-        if (this.isParentMode) {
-            if (row?.violationRecordId) this.pendingDeleteViolationIds.add(row.violationRecordId);
-            if (row?.afterDocumentId) this.pendingDeleteDocumentIds.add(row.afterDocumentId);
-            if (row?.beforeDocumentId) this.pendingDeleteDocumentIds.add(row.beforeDocumentId);
-        } else {
-            if (row?.violationRecordId) this.pendingDeleteViolationIds.add(row.violationRecordId);
-            if (row?.documentId) this.pendingDeleteDocumentIds.add(row.documentId);
+        // If the row has a saved violation id, delete immediately (draft-safe)
+        if (row?.violationRecordId) {
+            this._beginWork();
+            try {
+                await deleteViolationAndFiles({ violationId: row.violationRecordId });
+            } catch (e) {
+                this.toast('Delete failed', this.reduceError(e), 'error');
+                this._endWork();
+                return;
+            }
+            this._endWork();
         }
 
         this.rows = (this.rows || []).filter(r => r.rowId !== rowId);
@@ -614,7 +566,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         if (!file) return;
 
         const row = (this.rows || []).find(r => r.rowId === rowId);
-        if (!row?.documentId) return;
+        if (!row) return;
 
         this.rows = (this.rows || []).map(r => {
             if (r.rowId !== rowId) return r;
@@ -629,21 +581,49 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             };
         });
 
-        this._beginWork();
-        try {
-            await updateViolationDocumentAfterUpload({
-                documentId: row.documentId,
-                fileName: file.name,
-                contentDocumentId: file.documentId
-            });
-
-            await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'evidence', rowId });
-
-        } catch (e) {
-            this.toast('Document update failed', this.reduceError(e), 'error');
-        } finally {
-            this._endWork();
+        // If first upload, create violation + document and attach in one go
+        if (!row.documentId || !row.violationRecordId) {
+            this._beginWork();
+            try {
+                const resp = await createViolationAndAttachDocument({
+                    caseId: this.recordId,
+                    vsrId: this.vsrId,
+                    heading: row.name,
+                    category: row.category,
+                    description: row.description,
+                    documentType: 'VSR Violation Before Evidence',
+                    fileName: file.name,
+                    contentDocumentId: file.documentId
+                });
+                this.rows = (this.rows || []).map(r => {
+                    if (r.rowId !== rowId) return r;
+                    return {
+                        ...r,
+                        violationRecordId: resp?.violationId || null,
+                        documentId: resp?.documentId || null
+                    };
+                });
+            } catch (e) {
+                this.toast('Upload failed', this.reduceError(e), 'error');
+            } finally {
+                this._endWork();
+            }
+        } else {
+            this._beginWork();
+            try {
+                await updateViolationDocumentAfterUpload({
+                    documentId: row.documentId,
+                    fileName: file.name,
+                    contentDocumentId: file.documentId
+                });
+            } catch (e) {
+                this.toast('Document update failed', this.reduceError(e), 'error');
+            } finally {
+                this._endWork();
+            }
         }
+
+        await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'evidence', rowId });
     }
 
     async handleAfterUploadFinished(event) {
@@ -659,7 +639,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         if (!file) return;
 
         const row = (this.rows || []).find(r => r.rowId === rowId);
-        if (!row?.afterDocumentId) return;
+        if (!row) return;
 
         this.rows = (this.rows || []).map(r => {
             if (r.rowId !== rowId) return r;
@@ -676,21 +656,52 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             return this.deriveRowState(updated);
         });
 
-        this._beginWork();
-        try {
-            await updateViolationDocumentAfterUpload({
-                documentId: row.afterDocumentId,
-                fileName: file.name,
-                contentDocumentId: file.documentId
-            });
-
-            await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'after', rowId });
-
-        } catch (e) {
-            this.toast('After photo update failed', this.reduceError(e), 'error');
-        } finally {
-            this._endWork();
+        // Baseline carried-forward row: create child violation + docs on first AFTER upload
+        if (row.isParentBaselineRow && !row.violationRecordId) {
+            this._beginWork();
+            try {
+                const resp = await createCarriedForwardViolationAndAttachAfter({
+                    caseId: this.recordId,
+                    vsrId: this.vsrId,
+                    sourceViolationId: row.sourceViolationRecordId,
+                    heading: row.name,
+                    category: row.category,
+                    description: row.description,
+                    beforeContentDocumentId: row.beforeContentDocumentId,
+                    beforeFileName: row.beforeFileName,
+                    afterFileName: file.name,
+                    afterContentDocumentId: file.documentId
+                });
+                this.rows = (this.rows || []).map(r => {
+                    if (r.rowId !== rowId) return r;
+                    return this.deriveRowState({
+                        ...r,
+                        violationRecordId: resp?.violationId || null,
+                        afterDocumentId: resp?.afterDocumentId || null,
+                        isParentBaselineRow: false
+                    });
+                });
+            } catch (e) {
+                this.toast('After photo upload failed', this.reduceError(e), 'error');
+            } finally {
+                this._endWork();
+            }
+        } else if (row.afterDocumentId) {
+            this._beginWork();
+            try {
+                await updateViolationDocumentAfterUpload({
+                    documentId: row.afterDocumentId,
+                    fileName: file.name,
+                    contentDocumentId: file.documentId
+                });
+            } catch (e) {
+                this.toast('After photo update failed', this.reduceError(e), 'error');
+            } finally {
+                this._endWork();
+            }
         }
+
+        await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'after', rowId });
     }
 
     async handleBeforeUploadFinished(event) {
@@ -706,7 +717,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         if (!file) return;
 
         const row = (this.rows || []).find(r => r.rowId === rowId);
-        if (!row?.beforeDocumentId) return;
+        if (!row) return;
 
         this.rows = (this.rows || []).map(r => {
             if (r.rowId !== rowId) return r;
@@ -723,21 +734,48 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             return this.deriveRowState(updated);
         });
 
-        this._beginWork();
-        try {
-            await updateViolationDocumentAfterUpload({
-                documentId: row.beforeDocumentId,
-                fileName: file.name,
-                contentDocumentId: file.documentId
-            });
-
-            await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'before', rowId });
-
-        } catch (e) {
-            this.toast('Before photo update failed', this.reduceError(e), 'error');
-        } finally {
-            this._endWork();
+        if (!row.beforeDocumentId || !row.violationRecordId) {
+            this._beginWork();
+            try {
+                const resp = await createViolationAndAttachDocument({
+                    caseId: this.recordId,
+                    vsrId: this.vsrId,
+                    heading: row.name,
+                    category: row.category,
+                    description: row.description,
+                    documentType: 'VSR Violation Before Evidence',
+                    fileName: file.name,
+                    contentDocumentId: file.documentId
+                });
+                this.rows = (this.rows || []).map(r => {
+                    if (r.rowId !== rowId) return r;
+                    return this.deriveRowState({
+                        ...r,
+                        violationRecordId: resp?.violationId || null,
+                        beforeDocumentId: resp?.documentId || null
+                    });
+                });
+            } catch (e) {
+                this.toast('Before photo upload failed', this.reduceError(e), 'error');
+            } finally {
+                this._endWork();
+            }
+        } else {
+            this._beginWork();
+            try {
+                await updateViolationDocumentAfterUpload({
+                    documentId: row.beforeDocumentId,
+                    fileName: file.name,
+                    contentDocumentId: file.documentId
+                });
+            } catch (e) {
+                this.toast('Before photo update failed', this.reduceError(e), 'error');
+            } finally {
+                this._endWork();
+            }
         }
+
+        await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'before', rowId });
     }
 
     // ---------------------------
@@ -850,15 +888,6 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
     // ---------------------------
     // Villa upload (existing)
     // ---------------------------
-    async initVillaPicture() {
-        if (this.villaDocumentId) return;
-        try {
-            this.villaDocumentId = await createVillaPictureDocument({ caseId: this.recordId });
-        } catch (e) {
-            this.toast('Villa picture document creation failed', this.reduceError(e), 'error');
-        }
-    }
-
     async handleVillaUploadFinished(event) {
         const uploadedFiles = event.detail.files || [];
 
@@ -878,11 +907,13 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         this.villaFileErrorMessage = '';
 
         try {
-            await updateVillaPictureAfterUpload({
-                documentId: this.villaDocumentId,
+            const docId = await upsertVillaAndAttach({
+                caseId: this.recordId,
+                vsrId: this.vsrId,
                 fileName: file.name,
                 contentDocumentId: file.documentId
             });
+            this.villaDocumentId = docId;
 
             await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'villa' });
 
@@ -891,51 +922,8 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         }
     }
 
-    // ---------------------------
-    // After placeholders (carried-forward only)
-    // ---------------------------
-    async ensureAfterDocsForRows() {
-        const targets = (this.rows || []).filter(r => r.isCarriedForward && !r.afterDocumentId);
-
-        const idsNeedingDocs = targets
-            .map(r => r.sourceViolationRecordId || r.violationRecordId)
-            .filter(Boolean);
-
-        if (!idsNeedingDocs.length) return;
-
-        this.rows = (this.rows || []).map(r => {
-            if (!r.isCarriedForward || r.afterDocumentId) return r;
-            return { ...r, isAfterDocCreating: true };
-        });
-
-        let mapResp;
-        this._beginWork();
-        try {
-            mapResp = await getOrCreateAfterPhotoDocuments({
-                caseId: this.recordId,
-                sourceViolationIds: idsNeedingDocs
-            });
-        } catch (e) {
-            this.toast('After photo placeholders failed', this.reduceError(e), 'error');
-            return;
-        } finally {
-            this._endWork();
-        }
-
-        this.rows = (this.rows || []).map(r => {
-            if (!r.isCarriedForward || r.afterDocumentId) return { ...r, isAfterDocCreating: false };
-
-            const key = r.sourceViolationRecordId || r.violationRecordId;
-            const docId = mapResp ? mapResp[key] : null;
-
-            return this.deriveRowState({
-                ...r,
-                afterDocumentId: docId || null,
-                isAfterDocNotReady: !docId,
-                isAfterDocCreating: false
-            });
-        });
-    }
+    // After placeholders are no longer created on load.
+    // Baseline carried-forward rows create their child violation + docs on first AFTER upload.
 
     // ---------------------------
     // Fixed checkbox
@@ -960,8 +948,8 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         this.isSubmitting = true;
 
         try {
-            const deletedViolationIdsJson = JSON.stringify(Array.from(this.pendingDeleteViolationIds));
-            const deletedDocumentIdsJson = JSON.stringify(Array.from(this.pendingDeleteDocumentIds));
+            const deletedViolationIdsJson = JSON.stringify([]);
+            const deletedDocumentIdsJson = JSON.stringify([]);
 
             const invalidOther = (this.rows || []).some(r =>
                 r.isOther && (!r.category || !r.category.trim() || !r.description || !r.description.trim())
@@ -1138,25 +1126,35 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
 
         const isRowDisabled = isParentMode && !!row.isFixedOnLoad;
 
-        const isCategoryDisabledFinal = !!row.isCategoryDisabled || isRowDisabled;
-        const isDescriptionDisabled = !!row.isOther && isRowDisabled;
+        // Parent baseline rows (sourced from parent case) are read-only except AFTER upload.
+        const isParentBaselineRow = isParentMode
+            && !!row.isCarriedForward
+            && !!row.sourceViolationRecordId
+            && !row.violationRecordId;
 
-        const isBeforeUploadDisabled = isRowDisabled || !!row.isBeforeDocNotReady;
-        const isAfterUploadDisabled = isRowDisabled || !!row.isAfterDocNotReady;
+        const isCategoryDisabledFinal = !!row.isCategoryDisabled || isRowDisabled || isParentBaselineRow;
+        const isDescriptionDisabled = (!!row.isOther && isRowDisabled) || (row.isOther && isParentBaselineRow);
 
-        const isFixedDisabledFinal = isNewInFollowUp || isRowDisabled;
+        const isBeforeUploadDisabled = isRowDisabled || !!row.isBeforeDocNotReady || isParentBaselineRow;
+        const isAfterUploadDisabled = isParentBaselineRow ? false : (isRowDisabled || !!row.isAfterDocNotReady);
+
+        const isFixedDisabledFinal = isNewInFollowUp || isRowDisabled || isParentBaselineRow;
         const isFixed = isNewInFollowUp ? false : !!row.isFixed;
+
+        const isDeleteDisabledFinal = isRowDisabled || isParentBaselineRow;
 
         return {
             ...row,
             isCarriedForward,
             isNewInFollowUp,
             isRowDisabled,
+            isParentBaselineRow,
             isCategoryDisabledFinal,
             isDescriptionDisabled,
             isBeforeUploadDisabled,
             isAfterUploadDisabled,
             isFixedDisabledFinal,
+            isDeleteDisabledFinal,
             isFixed
         };
     }

@@ -85,9 +85,10 @@
                             <template if:false={villaFiles.length}>
                                 <div class="uploadCenter">
                                     <lightning-file-upload
-                                        record-id={villaDocumentId}
+                                        record-id={vsrId}
                                         accept={acceptedFormats}
-                                        onuploadfinished={handleVillaUploadFinished}>
+                                        onuploadfinished={handleVillaUploadFinished}
+                                        disabled={showGlobalSpinner}>
                                     </lightning-file-upload>
                                 </div>
                             </template>
@@ -238,11 +239,11 @@
                                                         <template if:false={row.beforeFiles.length}>
                                                             <div class="uploadCenter">
                                                                 <lightning-file-upload
-                                                                    record-id={row.beforeDocumentId}
+                                                                    record-id={vsrId}
                                                                     accept={acceptedFormats}
                                                                     onuploadfinished={handleBeforeUploadFinished}
                                                                     data-rowid={row.rowId}
-                                                                    disabled={row.isBeforeUploadDisabled}>
+                                                                    disabled={row.isBeforeUploadDisabled || showGlobalSpinner}>
                                                                 </lightning-file-upload>
                                                             </div>
                                                         </template>
@@ -330,11 +331,11 @@
                                                             <template if:false={row.afterFiles.length}>
                                                                 <div class="uploadCenter">
                                                                     <lightning-file-upload
-                                                                        record-id={row.afterDocumentId}
+                                                                        record-id={vsrId}
                                                                         accept={acceptedFormats}
                                                                         onuploadfinished={handleAfterUploadFinished}
                                                                         data-rowid={row.rowId}
-                                                                        disabled={row.isAfterUploadDisabled}>
+                                                                        disabled={row.isAfterUploadDisabled || showGlobalSpinner}>
                                                                     </lightning-file-upload>
                                                                 </div>
                                                             </template>
@@ -401,7 +402,7 @@
                                                         title="Delete"
                                                         onclick={handleDeleteRow}
                                                         data-rowid={row.rowId}
-                                                        disabled={row.isRowDisabled}>
+                                                        disabled={row.isDeleteDisabledFinal}>
                                                     </lightning-button-icon>
                                                 </div>
                                             </td>
@@ -420,11 +421,11 @@
                                                         <template if:false={row.files.length}>
                                                             <div class="uploadCenter">
                                                                 <lightning-file-upload
-                                                                    record-id={row.documentId}
+                                                                    record-id={vsrId}
                                                                     accept={acceptedFormats}
                                                                     onuploadfinished={handleUploadFinished}
                                                                     data-rowid={row.rowId}
-                                                                    disabled={row.isDocNotReady}>
+                                                                    disabled={row.isDocNotReady || showGlobalSpinner}>
                                                                 </lightning-file-upload>
                                                             </div>
                                                         </template>
