@@ -53,23 +53,14 @@ public with sharing class vSRViolationCaptureController {
                 vsrToLoad = parentVsr;
                 vsrCaseId = c.Related_Case__c;
             }
-        } else if (isFollowUp) {
-            // also load parent VSR (used for villa fallback)
-            List<VSR__c> parentVsrs = [
-                SELECT Id, Case__c
-                FROM VSR__c
-                WHERE Case__c = :c.Related_Case__c
-                ORDER BY CreatedDate DESC
-                LIMIT 1
-            ];
-            if (!parentVsrs.isEmpty()) parentVsr = parentVsrs[0];
         }
 
         Boolean baselineMode = isFollowUp && (vsrToLoad != null) && (vsrCaseId == c.Related_Case__c);
 
         // -----------------------------
-        // Villa: ALWAYS return current-case placeholder doc id
-        // and show current-case file if exists, else parent-case file.
+        // Villa (NO carry-forward):
+        // - ALWAYS return current-case placeholder doc id
+        // - ONLY show current-case file (never parent)
         // -----------------------------
         Documents__c currentVillaDoc = getOrCreateVillaDocForCase(caseId, (currentVsr != null ? currentVsr.Id : null));
 
@@ -78,12 +69,7 @@ public with sharing class vSRViolationCaptureController {
             try { currentVillaCd = (Id) currentVillaDoc.AttachmentID__c; } catch (Exception ignore) {}
         }
 
-        Id parentVillaCd = null;
-        if (isFollowUp) {
-            parentVillaCd = getParentVillaContentDocumentId(c.Related_Case__c, (parentVsr != null ? parentVsr.Id : null));
-        }
-
-        Id villaCdToShow = (currentVillaCd != null) ? currentVillaCd : parentVillaCd;
+        Id villaCdToShow = currentVillaCd;
         String villaDisplayName = getFileTitleSafe(villaCdToShow);
         if (String.isBlank(villaDisplayName)) villaDisplayName = 'Villa Picture';
 
@@ -97,7 +83,7 @@ public with sharing class vSRViolationCaptureController {
                 // Upload target (current case placeholder)
                 'villaDocumentId' => (currentVillaDoc != null ? currentVillaDoc.Id : null),
 
-                // Display (current file else parent file)
+                // Display (current file only)
                 'villaFileName' => villaDisplayName,
                 'villaContentDocumentId' => (villaCdToShow != null ? String.valueOf(villaCdToShow) : null),
 
@@ -226,7 +212,7 @@ public with sharing class vSRViolationCaptureController {
             // Upload target (current case placeholder)
             'villaDocumentId' => (currentVillaDoc != null ? currentVillaDoc.Id : null),
 
-            // Display (current file else parent file)
+            // Display (current file only)
             'villaFileName' => villaDisplayName,
             'villaContentDocumentId' => (villaCdToShow != null ? String.valueOf(villaCdToShow) : null),
 
@@ -1172,20 +1158,8 @@ public with sharing class vSRViolationCaptureController {
             update doc;
         }
 
-        if (String.isBlank(doc.AttachmentID__c) && caseRec.Related_Case__c != null) {
-            Id parentCd = getParentVillaContentDocumentId(caseRec.Related_Case__c, null);
-            if (parentCd != null) {
-                doc.AttachmentID__c = String.valueOf(parentCd);
-                doc.Document_Type__c = 'Villa Picture';
-                update doc;
-
-                ensureLink(doc.Id, parentCd);
-                if (vsrId != null) ensureLink(vsrId, parentCd);
-
-                if (vsrId != null) removeOtherFilesFromEntities(new Set<Id>{ doc.Id, vsrId }, parentCd);
-                else removeOtherFilesFromEntities(new Set<Id>{ doc.Id }, parentCd);
-            }
-        } else if (!String.isBlank(doc.AttachmentID__c)) {
+        // NO carry-forward of villa picture. Only enforce links if the current-case doc has a file.
+        if (!String.isBlank(doc.AttachmentID__c)) {
             Id cdId;
             try { cdId = (Id) doc.AttachmentID__c; } catch (Exception ignore) { cdId = null; }
 
