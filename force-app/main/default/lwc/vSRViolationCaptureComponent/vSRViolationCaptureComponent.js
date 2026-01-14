@@ -1138,7 +1138,8 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         const isBeforeUploadDisabled = isRowDisabled || !!row.isBeforeDocNotReady || isParentBaselineRow;
         const isAfterUploadDisabled = isParentBaselineRow ? false : (isRowDisabled || !!row.isAfterDocNotReady);
 
-        const isFixedDisabledFinal = isNewInFollowUp || isRowDisabled || isParentBaselineRow;
+        // Parent baseline rows: allow Fixed checkbox + After upload (everything else read-only)
+        const isFixedDisabledFinal = isNewInFollowUp || isRowDisabled;
         const isFixed = isNewInFollowUp ? false : !!row.isFixed;
 
         const isDeleteDisabledFinal = isRowDisabled || isParentBaselineRow;
