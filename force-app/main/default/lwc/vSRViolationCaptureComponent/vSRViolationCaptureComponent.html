@@ -87,8 +87,7 @@
                                     <lightning-file-upload
                                         record-id={vsrId}
                                         accept={acceptedFormats}
-                                        onuploadfinished={handleVillaUploadFinished}
-                                        disabled={showGlobalSpinner}>
+                                        onuploadfinished={handleVillaUploadFinished}>
                                     </lightning-file-upload>
                                 </div>
                             </template>
@@ -243,7 +242,7 @@
                                                                     accept={acceptedFormats}
                                                                     onuploadfinished={handleBeforeUploadFinished}
                                                                     data-rowid={row.rowId}
-                                                                    disabled={row.isBeforeUploadDisabled || showGlobalSpinner}>
+                                                                    disabled={row.isBeforeUploadDisabled}>
                                                                 </lightning-file-upload>
                                                             </div>
                                                         </template>
@@ -335,7 +334,7 @@
                                                                         accept={acceptedFormats}
                                                                         onuploadfinished={handleAfterUploadFinished}
                                                                         data-rowid={row.rowId}
-                                                                        disabled={row.isAfterUploadDisabled || showGlobalSpinner}>
+                                                                        disabled={row.isAfterUploadDisabled}>
                                                                     </lightning-file-upload>
                                                                 </div>
                                                             </template>
@@ -425,7 +424,7 @@
                                                                     accept={acceptedFormats}
                                                                     onuploadfinished={handleUploadFinished}
                                                                     data-rowid={row.rowId}
-                                                                    disabled={row.isDocNotReady || showGlobalSpinner}>
+                                                                    disabled={row.isDocNotReady}>
                                                                 </lightning-file-upload>
                                                             </div>
                                                         </template>
