@@ -3,6 +3,7 @@ import { api } from 'lwc';
 
 export default class VsrViolationCaptureModal extends LightningModal {
     @api recordId;
+    isClosing = false;
     _isClosing = false;
 
     handleHeaderClose() {
@@ -14,7 +15,8 @@ export default class VsrViolationCaptureModal extends LightningModal {
     }
 
     handleSubmitted(event) {
-        this.closeAndHardRefresh({ action: 'submitted', vsrId: event.detail?.vsrId });
+        // Close immediately on success; reload shortly after so the success toast is visible.
+        this.closeAndHardRefresh({ action: 'submitted', vsrId: event.detail?.vsrId }, { delayBeforeCloseMs: 0, delayBeforeReloadMs: 1200 });
     }
 
     async handleSubmitClick() {
@@ -24,19 +26,18 @@ export default class VsrViolationCaptureModal extends LightningModal {
         }
     }
 
-    closeAndHardRefresh(payload) {
+    closeAndHardRefresh(payload, { delayBeforeCloseMs = 1000, delayBeforeReloadMs = 0 } = {}) {
         if (this._isClosing) return;
         this._isClosing = true;
+        this.isClosing = true;
 
-        // Give the user a brief moment to perceive the final spinner/toast,
-        // then close and hard-refresh.
         window.setTimeout(() => {
             try {
                 this.close(payload);
             } finally {
-                window.setTimeout(() => window.location.reload(), 0);
+                window.setTimeout(() => window.location.reload(), delayBeforeReloadMs);
             }
-        }, 1000);
+        }, delayBeforeCloseMs);
     }
 }
 

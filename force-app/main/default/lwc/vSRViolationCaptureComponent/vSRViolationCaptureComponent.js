@@ -1071,6 +1071,10 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                 : `VSR updated successfully (${savedVsrId}).`;
             this.toast(title, msg, 'success');
             this._vsrWasDraftOnOpen = false;
+
+            // Keep spinner briefly so the user can perceive success before the modal closes/reloads.
+            await this.sleep(1200);
+
             this.dispatchEvent(new CustomEvent('submitted', { detail: { vsrId: savedVsrId } }));
             setTimeout(() => this.refreshRecordPage(), 0);
 
@@ -1079,6 +1083,10 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         } finally {
             this.isSubmitting = false;
         }
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => window.setTimeout(resolve, ms));
     }
 
     computeStatusFromRows(rows) {

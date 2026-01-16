@@ -894,7 +894,10 @@ public with sharing class vSRViolationCaptureController {
             }
 
             if (oldCdId != null && oldCdId != newCdId) {
-                safeDeleteFileHard(oldCdId);
+                Set<Id> entities = new Set<Id>{ doc.Id };
+                if (doc.VSR__c != null) entities.add(doc.VSR__c);
+                if (doc.Violation__c != null) entities.add(doc.Violation__c);
+                safeUnlinkAndDeleteIfOrphaned(oldCdId, entities);
             }
 
             return doc.Id;
@@ -1055,15 +1058,34 @@ public with sharing class vSRViolationCaptureController {
         Id beforeDocId = docIds.get('BEFORE');
         Id afterDocId  = docIds.get('AFTER');
 
-        // BEFORE: reference parent ContentDocument (no copy, just link)
+        // BEFORE: clone parent's ContentDocument so child attachment is independent
         if (!String.isBlank(beforeContentDocumentId) && beforeDocId != null) {
-            update new Documents__c(
-                Id = beforeDocId,
-                AttachmentID__c = beforeContentDocumentId,
-                Status__c = 'Submitted',
-                Is_Customer_Doc__c = true
-            );
-            try { safeEnsureLink(beforeDocId, (Id) beforeContentDocumentId); } catch (Exception ignore) {}
+            Id parentCdId = null;
+            try { parentCdId = (Id) beforeContentDocumentId; } catch (Exception ignore) { parentCdId = null; }
+
+            if (parentCdId != null) {
+                try {
+                    Id newChildCdId = cloneContentDocumentToFirstPublishLocation(parentCdId, beforeDocId);
+                    if (newChildCdId != null) {
+                        update new Documents__c(
+                            Id = beforeDocId,
+                            AttachmentID__c = String.valueOf(newChildCdId),
+                            Status__c = 'Submitted',
+                            Is_Customer_Doc__c = true
+                        );
+                        safeEnsureLink(beforeDocId, newChildCdId);
+                    }
+                } catch (Exception e) {
+                    // If cloning fails, fall back to linking (but deletion logic prevents parent deletion).
+                    update new Documents__c(
+                        Id = beforeDocId,
+                        AttachmentID__c = beforeContentDocumentId,
+                        Status__c = 'Submitted',
+                        Is_Customer_Doc__c = true
+                    );
+                    try { safeEnsureLink(beforeDocId, parentCdId); } catch (Exception ignore2) {}
+                }
+            }
         }
 
         // AFTER: attach uploaded file
@@ -1133,7 +1155,9 @@ public with sharing class vSRViolationCaptureController {
             removeOtherFilesFromEntities(new Set<Id>{ doc.Id }, newCdId);
 
             if (oldCdId != null && oldCdId != newCdId) {
-                safeDeleteFileHard(oldCdId);
+                Set<Id> entities = new Set<Id>{ doc.Id };
+                if (doc.VSR__c != null) entities.add(doc.VSR__c);
+                safeUnlinkAndDeleteIfOrphaned(oldCdId, entities);
             }
 
             return doc.Id;
@@ -1311,40 +1335,48 @@ public with sharing class vSRViolationCaptureController {
         if (violationIds == null || violationIds.isEmpty()) return;
 
         List<Documents__c> docs = [
-            SELECT Id, AttachmentID__c
+            SELECT Id, AttachmentID__c, VSR__c, Violation__c
             FROM Documents__c
             WHERE Violation__c IN :violationIds
         ];
 
-        Set<Id> contentDocIds = new Set<Id>();
         for (Documents__c d : docs) {
-            if (!String.isBlank(d.AttachmentID__c)) {
-                try { contentDocIds.add((Id) d.AttachmentID__c); } catch (Exception ignore) {}
-            }
+            if (String.isBlank(d.AttachmentID__c)) continue;
+            Id cdId = null;
+            try { cdId = (Id) d.AttachmentID__c; } catch (Exception ignore) { cdId = null; }
+            if (cdId == null) continue;
+
+            Set<Id> entities = new Set<Id>{ d.Id };
+            if (d.VSR__c != null) entities.add(d.VSR__c);
+            if (d.Violation__c != null) entities.add(d.Violation__c);
+            safeUnlinkAndDeleteIfOrphaned(cdId, entities);
         }
 
         if (!docs.isEmpty()) delete docs;
-        for (Id cdId : contentDocIds) safeDeleteFileHard(cdId);
     }
 
     private static void deleteDocumentsAndFilesByDocumentIds(Set<Id> documentIds) {
         if (documentIds == null || documentIds.isEmpty()) return;
 
         List<Documents__c> docs = [
-            SELECT Id, AttachmentID__c
+            SELECT Id, AttachmentID__c, VSR__c, Violation__c
             FROM Documents__c
             WHERE Id IN :documentIds
         ];
 
-        Set<Id> contentDocIds = new Set<Id>();
         for (Documents__c d : docs) {
-            if (!String.isBlank(d.AttachmentID__c)) {
-                try { contentDocIds.add((Id) d.AttachmentID__c); } catch (Exception ignore) {}
-            }
+            if (String.isBlank(d.AttachmentID__c)) continue;
+            Id cdId = null;
+            try { cdId = (Id) d.AttachmentID__c; } catch (Exception ignore) { cdId = null; }
+            if (cdId == null) continue;
+
+            Set<Id> entities = new Set<Id>{ d.Id };
+            if (d.VSR__c != null) entities.add(d.VSR__c);
+            if (d.Violation__c != null) entities.add(d.Violation__c);
+            safeUnlinkAndDeleteIfOrphaned(cdId, entities);
         }
 
         if (!docs.isEmpty()) delete docs;
-        for (Id cdId : contentDocIds) safeDeleteFileHard(cdId);
     }
 
     private static void ensureLink(Id entityId, Id contentDocumentId) {
@@ -1376,31 +1408,65 @@ public with sharing class vSRViolationCaptureController {
         }
     }
 
-    private static void safeDeleteFileHard(Id contentDocumentId) {
+    private static void safeUnlinkAndDeleteIfOrphaned(Id contentDocumentId, Set<Id> linkedEntityIdsToUnlink) {
         if (contentDocumentId == null) return;
+        Set<Id> ids = (linkedEntityIdsToUnlink == null) ? new Set<Id>() : new Set<Id>(linkedEntityIdsToUnlink);
+        ids.remove(null);
 
+        // Remove links only from the provided entities (do NOT delete all links globally).
+        if (!ids.isEmpty()) {
+            try {
+                List<ContentDocumentLink> links = [
+                    SELECT Id
+                    FROM ContentDocumentLink
+                    WHERE ContentDocumentId = :contentDocumentId
+                    AND LinkedEntityId IN :ids
+                ];
+                if (!links.isEmpty()) Database.delete(links, false);
+            } catch (Exception e) {
+                System.debug('safeUnlinkAndDeleteIfOrphaned: link delete failed: ' + e.getMessage());
+            }
+        }
+
+        // Delete the ContentDocument only if it has no remaining links.
         try {
-            List<ContentDocumentLink> links = [
-                SELECT Id
+            Integer remaining = [
+                SELECT COUNT()
                 FROM ContentDocumentLink
                 WHERE ContentDocumentId = :contentDocumentId
             ];
-            if (!links.isEmpty()) Database.delete(links, false);
+            if (remaining == 0) {
+                Database.delete(new List<ContentDocument>{ new ContentDocument(Id = contentDocumentId) }, false);
+            }
         } catch (Exception e) {
-            System.debug('safeDeleteFileHard: link delete failed: ' + e.getMessage());
+            System.debug('safeUnlinkAndDeleteIfOrphaned: content doc delete failed: ' + e.getMessage());
+        }
+    }
+
+    private static Id cloneContentDocumentToFirstPublishLocation(Id sourceContentDocumentId, Id firstPublishLocationId) {
+        if (sourceContentDocumentId == null || firstPublishLocationId == null) return null;
+
+        ContentVersion src = [
+            SELECT Id, Title, FileExtension, VersionData, PathOnClient
+            FROM ContentVersion
+            WHERE ContentDocumentId = :sourceContentDocumentId
+            AND IsLatest = true
+            LIMIT 1
+        ];
+
+        String path = src.PathOnClient;
+        if (String.isBlank(path)) {
+            String ext = String.isBlank(src.FileExtension) ? '' : ('.' + src.FileExtension);
+            path = (String.isBlank(src.Title) ? 'File' : src.Title) + ext;
         }
 
-        try {
-            List<ContentDocument> docs = [
-                SELECT Id
-                FROM ContentDocument
-                WHERE Id = :contentDocumentId
-                LIMIT 1
-            ];
-            if (!docs.isEmpty()) Database.delete(docs, false);
-        } catch (Exception e) {
-            System.debug('safeDeleteFileHard: content doc delete failed: ' + e.getMessage());
-        }
+        ContentVersion cv = new ContentVersion();
+        cv.FirstPublishLocationId = firstPublishLocationId;
+        cv.Title = src.Title;
+        cv.PathOnClient = path;
+        cv.VersionData = src.VersionData;
+        insert cv;
+        return cv.ContentDocumentId;
     }
 
     private static Boolean readBool(Map<String, Object> row, String key) {
@@ -1569,7 +1635,7 @@ public with sharing class vSRViolationCaptureController {
         }
 
         Documents__c doc = [
-            SELECT Id, AttachmentID__c
+            SELECT Id, AttachmentID__c, VSR__c, Violation__c
             FROM Documents__c
             WHERE Id = :documentId
             LIMIT 1
@@ -1586,7 +1652,10 @@ public with sharing class vSRViolationCaptureController {
         }
 
         if (oldCdId != null) {
-            safeDeleteFileHard(oldCdId);
+            Set<Id> entities = new Set<Id>{ doc.Id };
+            if (doc.VSR__c != null) entities.add(doc.VSR__c);
+            if (doc.Violation__c != null) entities.add(doc.Violation__c);
+            safeUnlinkAndDeleteIfOrphaned(oldCdId, entities);
         }
     }
 }

@@ -2,6 +2,11 @@
     <lightning-modal-header label="Violation Capture" onclose={handleHeaderClose}></lightning-modal-header>
 
     <lightning-modal-body class="modalBody">
+        <template if:true={isClosing}>
+            <div class="modalOverlay">
+                <lightning-spinner alternative-text="Closing" size="medium"></lightning-spinner>
+            </div>
+        </template>
         <c-v-s-r-violation-capture-component
             record-id={recordId}
             onclose={handleClose}
