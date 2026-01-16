@@ -3,6 +3,7 @@ import { api } from 'lwc';
 
 export default class VsrViolationCaptureModal extends LightningModal {
     @api recordId;
+    _isClosing = false;
 
     handleHeaderClose() {
         this.closeAndHardRefresh({ action: 'close' });
@@ -24,12 +25,18 @@ export default class VsrViolationCaptureModal extends LightningModal {
     }
 
     closeAndHardRefresh(payload) {
-        try {
-            this.close(payload);
-        } finally {
-            // defer so the modal closes cleanly first
-            window.setTimeout(() => window.location.reload(), 0);
-        }
+        if (this._isClosing) return;
+        this._isClosing = true;
+
+        // Give the user a brief moment to perceive the final spinner/toast,
+        // then close and hard-refresh.
+        window.setTimeout(() => {
+            try {
+                this.close(payload);
+            } finally {
+                window.setTimeout(() => window.location.reload(), 0);
+            }
+        }, 1000);
     }
 }
 

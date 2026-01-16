@@ -18,21 +18,11 @@ export default class VsrViolationCaptureLauncherCmp extends LightningElement {
         }
 
         try {
-            const result = await VsrViolationCaptureModal.open({
+            await VsrViolationCaptureModal.open({
                 size: 'large',
                 description: 'Violation Capture',
                 recordId: this.recordId
             });
-
-            if (result?.action === 'submitted') {
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Submitted',
-                        message: `VSR submitted (${result.vsrId}).`,
-                        variant: 'success'
-                    })
-                );
-            }
         } catch (e) {
             // user closed modal or unexpected error
         }

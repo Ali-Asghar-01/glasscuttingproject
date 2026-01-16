@@ -85,9 +85,10 @@
                             <template if:false={villaFiles.length}>
                                 <div class="uploadCenter">
                                     <lightning-file-upload
-                                        record-id={vsrId}
+                                        record-id={villaUploadRecordId}
                                         accept={acceptedFormats}
-                                        onuploadfinished={handleVillaUploadFinished}>
+                                        onuploadfinished={handleVillaUploadFinished}
+                                        disabled={isVillaUploadDisabled}>
                                     </lightning-file-upload>
                                 </div>
                             </template>
@@ -238,7 +239,7 @@
                                                         <template if:false={row.beforeFiles.length}>
                                                             <div class="uploadCenter">
                                                                 <lightning-file-upload
-                                                                    record-id={vsrId}
+                                                                    record-id={row.beforeUploadRecordId}
                                                                     accept={acceptedFormats}
                                                                     onuploadfinished={handleBeforeUploadFinished}
                                                                     data-rowid={row.rowId}
@@ -330,7 +331,7 @@
                                                             <template if:false={row.afterFiles.length}>
                                                                 <div class="uploadCenter">
                                                                     <lightning-file-upload
-                                                                        record-id={vsrId}
+                                                                        record-id={row.afterUploadRecordId}
                                                                         accept={acceptedFormats}
                                                                         onuploadfinished={handleAfterUploadFinished}
                                                                         data-rowid={row.rowId}
@@ -420,7 +421,7 @@
                                                         <template if:false={row.files.length}>
                                                             <div class="uploadCenter">
                                                                 <lightning-file-upload
-                                                                    record-id={vsrId}
+                                                                    record-id={row.evidenceUploadRecordId}
                                                                     accept={acceptedFormats}
                                                                     onuploadfinished={handleUploadFinished}
                                                                     data-rowid={row.rowId}

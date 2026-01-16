@@ -8,15 +8,14 @@ import getExistingVSRWithViolations from '@salesforce/apex/vSRViolationCaptureCo
 import submitVSR from '@salesforce/apex/vSRViolationCaptureController.submitVSR';
 
 import ensureVsrForCase from '@salesforce/apex/vSRViolationCaptureController.ensureVsrForCase';
-import createViolationAndAttachDocument from '@salesforce/apex/vSRViolationCaptureController.createViolationAndAttachDocument';
+import ensureVillaDocumentForVsr from '@salesforce/apex/vSRViolationCaptureController.ensureVillaDocumentForVsr';
+import createViolationWithPlaceholders from '@salesforce/apex/vSRViolationCaptureController.createViolationWithPlaceholders';
+import ensureViolationPlaceholders from '@salesforce/apex/vSRViolationCaptureController.ensureViolationPlaceholders';
 import createCarriedForwardViolationAndAttachAfter from '@salesforce/apex/vSRViolationCaptureController.createCarriedForwardViolationAndAttachAfter';
 import deleteViolationAndFiles from '@salesforce/apex/vSRViolationCaptureController.deleteViolationAndFiles';
 import updateViolationDocumentAfterUpload from '@salesforce/apex/vSRViolationCaptureController.updateViolationDocumentAfterUpload';
 
 import upsertVillaAndAttach from '@salesforce/apex/vSRViolationCaptureController.upsertVillaAndAttach';
-import updateVillaPictureAfterUpload from '@salesforce/apex/vSRViolationCaptureController.updateVillaPictureAfterUpload';
-
-import getOrCreateAfterPhotoDocuments from '@salesforce/apex/vSRViolationCaptureController.getOrCreateAfterPhotoDocuments';
 import getThumbnailUrls from '@salesforce/apex/vSRViolationCaptureController.getThumbnailUrls';
 
 // NEW: remove/clear uploaded file (re-enables upload UI)
@@ -45,6 +44,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
     @track isParentMode = false;  // follow-up (Case.Related_Case__c exists)
     isBaselineMode = false;       // parent baseline vs reopen
     vsrId = null;
+    _vsrWasDraftOnOpen = true;
 
     // Spinner
     isLoading = false;
@@ -71,6 +71,14 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
 
     // Upload formats
     acceptedFormats = ['.png', '.jpg', '.jpeg', '.mp4', '.mov'];
+
+    get villaUploadRecordId() {
+        return this.villaDocumentId || this.vsrId;
+    }
+
+    get isVillaUploadDisabled() {
+        return !this.villaUploadRecordId || this.showGlobalSpinner;
+    }
 
     @api async submitFromHost() {
         return this.handleSubmit();
@@ -110,6 +118,12 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         try {
             // Ensure a single draft VSR exists for this Case (Status/Issued date remain null)
             this.vsrId = await ensureVsrForCase({ caseId: this.recordId });
+            // Ensure villa placeholder exists so uploads target Documents__c (not VSR__c)
+            try {
+                this.villaDocumentId = await ensureVillaDocumentForVsr({ vsrId: this.vsrId });
+            } catch (e) {
+                // best-effort; loadExistingVsrRows will hydrate as well
+            }
             await this.loadViolations();
             await this.loadExistingVsrRows();
             await this.hydrateAllThumbnails();
@@ -290,9 +304,10 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
 
             this.isParentMode = !!data.isFollowUp;
             this.isBaselineMode = !!data.sourceIsParentBaseline;
+            this._vsrWasDraftOnOpen = !data.vsrStatus;
 
             // Villa doc (current case)
-            this.villaDocumentId = data.villaDocumentId || null;
+            this.villaDocumentId = data.villaDocumentId || this.villaDocumentId || null;
             const villaCdId = data.villaContentDocumentId || null;
             const villaName = data.villaFileName || '';
 
@@ -395,20 +410,49 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                     isCategoryDisabled: false,
 
                     documentId: r.documentId || null,
+                    evidenceUploadRecordId: (r.documentId || this.vsrId),
                     files: contentDocumentId ? [{ name: fileName || 'Uploaded file', documentId: contentDocumentId }] : [],
                     filesSummary: contentDocumentId ? (fileName || 'Uploaded file') : '',
                     fileUrl: contentDocumentId ? `/lightning/r/ContentDocument/${contentDocumentId}/view` : null,
                     fileThumbUrl: null,
                     fileError: false,
                     fileErrorMessage: '',
-                    isDocNotReady: !r.documentId,
+                    isDocNotReady: false,
                     isDocCreating: false
                 };
             });
 
             this.rows = loadedRows;
 
-            // No placeholder creation on load; baseline rows create records on first upload.
+            // Ensure every Violation has the 3 placeholders (Before/After/NOC) (best-effort).
+            try {
+                const vioIds = Array.from(new Set((this.rows || []).map(x => x?.violationRecordId).filter(Boolean)));
+                if (vioIds.length) {
+                    const map = await ensureViolationPlaceholders({ violationIds: vioIds });
+                    this.rows = (this.rows || []).map(rr => {
+                        if (!rr?.violationRecordId) return rr;
+                        const p = map?.[rr.violationRecordId];
+                        if (!p) return rr;
+                        if (!this.isParentMode) {
+                            const beforeId = p.BEFORE;
+                            return {
+                                ...rr,
+                                documentId: beforeId || rr.documentId,
+                                evidenceUploadRecordId: (beforeId || rr.documentId || this.vsrId)
+                            };
+                        }
+                        return this.deriveRowState({
+                            ...rr,
+                            beforeDocumentId: p.BEFORE || rr.beforeDocumentId,
+                            afterDocumentId: p.AFTER || rr.afterDocumentId
+                        });
+                    });
+                }
+            } catch (e) {
+                // ignore
+            }
+
+            // Baseline rows still create child records on first AFTER upload.
 
             this.showViolationDropdown = false;
             this.highlightedIndex = -1;
@@ -450,77 +494,94 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             (violation.name || '').trim().toLowerCase() === 'other' ||
             (violation.id || '').trim().toLowerCase() === 'other';
 
-        if (this.isParentMode) {
-            const row = this.deriveRowState({
-                rowId,
-                violationRecordId: null,
-                sourceViolationRecordId: null,
-
-                name: violation.name,
+        this.isAddInProgress = true;
+        try {
+            const created = await createViolationWithPlaceholders({
+                caseId: this.recordId,
+                vsrId: this.vsrId,
+                heading: violation.name,
                 category: isOther ? '' : violation.category,
-                description: isOther ? '' : violation.description,
-                isOther,
-
-                isCarriedForward: false,
-                isFixedOnLoad: false,
-                isFixed: false,
-
-                beforeDocumentId: null,
-                beforeContentDocumentId: null,
-                beforeFileName: null,
-                beforeFiles: [],
-                beforeFilesSummary: '',
-                beforeFileUrl: null,
-                beforeThumbUrl: null,
-
-                afterDocumentId: null,
-                afterFiles: [],
-                afterFilesSummary: '',
-                afterFileUrl: null,
-                afterThumbUrl: null,
-
-                isCategoryDisabled: false,
-                // no placeholder docs on Add
-                isBeforeDocNotReady: false,
-                isBeforeDocCreating: false,
-                isAfterDocNotReady: false,
-                isAfterDocCreating: false,
-
-                beforeUploadError: false,
-                beforeUploadErrorMessage: '',
-                afterFileError: false,
-                afterFileErrorMessage: ''
+                description: isOther ? '' : violation.description
             });
 
-            this.rows = [...this.rows, row];
+            const violationId = created?.violationId || null;
+            const beforeDocId = created?.beforeDocumentId || null;
+            const afterDocId = created?.afterDocumentId || null;
 
-        } else {
-            const row = {
-                rowId,
-                violationRecordId: null,
+            if (this.isParentMode) {
+                const row = this.deriveRowState({
+                    rowId,
+                    violationRecordId: violationId,
+                    sourceViolationRecordId: null,
 
-                documentId: null,
-                name: violation.name,
-                category: isOther ? '' : violation.category,
-                description: isOther ? '' : violation.description,
-                isOther,
+                    name: violation.name,
+                    category: isOther ? '' : violation.category,
+                    description: isOther ? '' : violation.description,
+                    isOther,
 
-                files: [],
-                filesSummary: '',
-                fileUrl: null,
-                fileThumbUrl: null,
-                fileError: false,
-                fileErrorMessage: '',
+                    isCarriedForward: false,
+                    isFixedOnLoad: false,
+                    isFixed: false,
 
-                // no placeholder docs on Add
-                isDocNotReady: false,
-                isDocCreating: false,
+                    beforeDocumentId: beforeDocId,
+                    beforeContentDocumentId: null,
+                    beforeFileName: null,
+                    beforeFiles: [],
+                    beforeFilesSummary: '',
+                    beforeFileUrl: null,
+                    beforeThumbUrl: null,
 
-                isFixed: false,
-                isCategoryDisabled: false
-            };
+                    afterDocumentId: afterDocId,
+                    afterFiles: [],
+                    afterFilesSummary: '',
+                    afterFileUrl: null,
+                    afterThumbUrl: null,
 
-            this.rows = [...this.rows, row];
+                    isCategoryDisabled: false,
+                    isBeforeDocNotReady: false,
+                    isBeforeDocCreating: false,
+                    isAfterDocNotReady: false,
+                    isAfterDocCreating: false,
+
+                    beforeUploadError: false,
+                    beforeUploadErrorMessage: '',
+                    afterFileError: false,
+                    afterFileErrorMessage: ''
+                });
+
+                this.rows = [...this.rows, row];
+            } else {
+                const row = {
+                    rowId,
+                    violationRecordId: violationId,
+
+                    documentId: beforeDocId,
+                    evidenceUploadRecordId: beforeDocId || this.vsrId,
+                    name: violation.name,
+                    category: isOther ? '' : violation.category,
+                    description: isOther ? '' : violation.description,
+                    isOther,
+
+                    files: [],
+                    filesSummary: '',
+                    fileUrl: null,
+                    fileThumbUrl: null,
+                    fileError: false,
+                    fileErrorMessage: '',
+
+                    isDocNotReady: false,
+                    isDocCreating: false,
+
+                    isFixed: false,
+                    isCategoryDisabled: false
+                };
+
+                this.rows = [...this.rows, row];
+            }
+        } catch (e) {
+            this.toast('Add failed', this.reduceError(e), 'error');
+        } finally {
+            this.isAddInProgress = false;
         }
     }
 
@@ -581,46 +642,22 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             };
         });
 
-        // If first upload, create violation + document and attach in one go
-        if (!row.documentId || !row.violationRecordId) {
-            this._beginWork();
-            try {
-                const resp = await createViolationAndAttachDocument({
-                    caseId: this.recordId,
-                    vsrId: this.vsrId,
-                    heading: row.name,
-                    category: row.category,
-                    description: row.description,
-                    documentType: 'VSR Violation Before Evidence',
-                    fileName: file.name,
-                    contentDocumentId: file.documentId
-                });
-                this.rows = (this.rows || []).map(r => {
-                    if (r.rowId !== rowId) return r;
-                    return {
-                        ...r,
-                        violationRecordId: resp?.violationId || null,
-                        documentId: resp?.documentId || null
-                    };
-                });
-            } catch (e) {
-                this.toast('Upload failed', this.reduceError(e), 'error');
-            } finally {
-                this._endWork();
-            }
-        } else {
-            this._beginWork();
-            try {
-                await updateViolationDocumentAfterUpload({
-                    documentId: row.documentId,
-                    fileName: file.name,
-                    contentDocumentId: file.documentId
-                });
-            } catch (e) {
-                this.toast('Document update failed', this.reduceError(e), 'error');
-            } finally {
-                this._endWork();
-            }
+        if (!row.documentId) {
+            this.toast('Upload failed', 'Missing document placeholder. Please refresh and try again.', 'error');
+            return;
+        }
+
+        this._beginWork();
+        try {
+            await updateViolationDocumentAfterUpload({
+                documentId: row.documentId,
+                fileName: file.name,
+                contentDocumentId: file.documentId
+            });
+        } catch (e) {
+            this.toast('Document update failed', this.reduceError(e), 'error');
+        } finally {
+            this._endWork();
         }
 
         await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'evidence', rowId });
@@ -678,6 +715,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                         ...r,
                         violationRecordId: resp?.violationId || null,
                         afterDocumentId: resp?.afterDocumentId || null,
+                        beforeDocumentId: resp?.beforeDocumentId || r.beforeDocumentId || null,
                         isParentBaselineRow: false
                     });
                 });
@@ -734,45 +772,22 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             return this.deriveRowState(updated);
         });
 
-        if (!row.beforeDocumentId || !row.violationRecordId) {
-            this._beginWork();
-            try {
-                const resp = await createViolationAndAttachDocument({
-                    caseId: this.recordId,
-                    vsrId: this.vsrId,
-                    heading: row.name,
-                    category: row.category,
-                    description: row.description,
-                    documentType: 'VSR Violation Before Evidence',
-                    fileName: file.name,
-                    contentDocumentId: file.documentId
-                });
-                this.rows = (this.rows || []).map(r => {
-                    if (r.rowId !== rowId) return r;
-                    return this.deriveRowState({
-                        ...r,
-                        violationRecordId: resp?.violationId || null,
-                        beforeDocumentId: resp?.documentId || null
-                    });
-                });
-            } catch (e) {
-                this.toast('Before photo upload failed', this.reduceError(e), 'error');
-            } finally {
-                this._endWork();
-            }
-        } else {
-            this._beginWork();
-            try {
-                await updateViolationDocumentAfterUpload({
-                    documentId: row.beforeDocumentId,
-                    fileName: file.name,
-                    contentDocumentId: file.documentId
-                });
-            } catch (e) {
-                this.toast('Before photo update failed', this.reduceError(e), 'error');
-            } finally {
-                this._endWork();
-            }
+        if (!row.beforeDocumentId) {
+            this.toast('Before photo upload failed', 'Missing document placeholder. Please refresh and try again.', 'error');
+            return;
+        }
+
+        this._beginWork();
+        try {
+            await updateViolationDocumentAfterUpload({
+                documentId: row.beforeDocumentId,
+                fileName: file.name,
+                contentDocumentId: file.documentId
+            });
+        } catch (e) {
+            this.toast('Before photo update failed', this.reduceError(e), 'error');
+        } finally {
+            this._endWork();
         }
 
         await this.hydrateThumbnailsForContentDocs([file.documentId], { scope: 'before', rowId });
@@ -1050,7 +1065,12 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                 deletedDocumentIdsJson
             });
 
-            this.toast('Submitted', `VSR saved successfully (${savedVsrId}).`, 'success');
+            const title = this._vsrWasDraftOnOpen ? 'Submitted' : 'Updated';
+            const msg = this._vsrWasDraftOnOpen
+                ? `VSR submitted successfully (${savedVsrId}).`
+                : `VSR updated successfully (${savedVsrId}).`;
+            this.toast(title, msg, 'success');
+            this._vsrWasDraftOnOpen = false;
             this.dispatchEvent(new CustomEvent('submitted', { detail: { vsrId: savedVsrId } }));
             setTimeout(() => this.refreshRecordPage(), 0);
 
@@ -1144,6 +1164,9 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
 
         const isDeleteDisabledFinal = isRowDisabled || isParentBaselineRow;
 
+        const beforeUploadRecordId = row.beforeDocumentId || this.vsrId;
+        const afterUploadRecordId = row.afterDocumentId || this.vsrId;
+
         return {
             ...row,
             isCarriedForward,
@@ -1156,7 +1179,9 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             isAfterUploadDisabled,
             isFixedDisabledFinal,
             isDeleteDisabledFinal,
-            isFixed
+            isFixed,
+            beforeUploadRecordId,
+            afterUploadRecordId
         };
     }
 
