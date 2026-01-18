@@ -103,7 +103,7 @@
                                 <div class="fileBlock">
                                     <template if:true={villaThumbUrl}>
                                         <div class="thumbWrap">
-                                            <img class="thumbImg" src={villaThumbUrl} alt="Villa thumbnail" />
+                                            <img class="thumbImg" src={villaThumbUrl} alt="Villa thumbnail" data-scope="villa" onerror={handleThumbError} />
                                         </div>
                                     </template>
 
@@ -256,7 +256,7 @@
                                                             <div class="fileBlock">
                                                                 <template if:true={row.beforeThumbUrl}>
                                                                     <div class="thumbWrap">
-                                                                        <img class="thumbImg" src={row.beforeThumbUrl} alt="Before thumbnail" />
+                                                                        <img class="thumbImg" src={row.beforeThumbUrl} alt="Before thumbnail" data-scope="before" data-rowid={row.rowId} onerror={handleThumbError} />
                                                                     </div>
                                                                 </template>
 
@@ -290,7 +290,7 @@
                                                             <div class="fileBlock">
                                                                 <template if:true={row.beforeThumbUrl}>
                                                                     <div class="thumbWrap">
-                                                                        <img class="thumbImg" src={row.beforeThumbUrl} alt="Before thumbnail" />
+                                                                        <img class="thumbImg" src={row.beforeThumbUrl} alt="Before thumbnail" data-scope="before" data-rowid={row.rowId} onerror={handleThumbError} />
                                                                     </div>
                                                                 </template>
                                                                 <div class="fileMetaRow fileMeta">
@@ -349,7 +349,7 @@
                                                             <div class="fileBlock">
                                                                 <template if:true={row.afterThumbUrl}>
                                                                     <div class="thumbWrap">
-                                                                        <img class="thumbImg" src={row.afterThumbUrl} alt="After thumbnail" />
+                                                                        <img class="thumbImg" src={row.afterThumbUrl} alt="After thumbnail" data-scope="after" data-rowid={row.rowId} onerror={handleThumbError} />
                                                                     </div>
                                                                 </template>
 
@@ -441,7 +441,7 @@
                                                         <div class="fileBlock">
                                                             <template if:true={row.fileThumbUrl}>
                                                                 <div class="thumbWrap">
-                                                                    <img class="thumbImg" src={row.fileThumbUrl} alt="Evidence thumbnail" />
+                                                                    <img class="thumbImg" src={row.fileThumbUrl} alt="Evidence thumbnail" data-scope="evidence" data-rowid={row.rowId} onerror={handleThumbError} />
                                                                 </div>
                                                             </template>
 

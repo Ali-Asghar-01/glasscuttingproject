@@ -1,0 +1,11 @@
+.banner {
+    border: 1px solid #ea001e;
+    background: #fff5f5;
+    border-radius: 0.5rem;
+}
+
+.msg {
+    color: #ea001e;
+    font-weight: 700;
+}
+

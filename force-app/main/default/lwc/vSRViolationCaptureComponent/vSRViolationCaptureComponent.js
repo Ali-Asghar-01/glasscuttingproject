@@ -1240,6 +1240,26 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         this.dispatchEvent(new ShowToastEvent({ title, message, variant }));
     }
 
+    // If thumbnail URL fails to load, hide the image to avoid broken/crash icon.
+    handleThumbError = (event) => {
+        const scope = event?.target?.dataset?.scope;
+        const rowId = event?.target?.dataset?.rowid;
+
+        if (scope === 'villa') {
+            this.villaThumbUrl = null;
+            return;
+        }
+
+        if (!rowId) return;
+        this.rows = (this.rows || []).map(r => {
+            if (r.rowId !== rowId) return r;
+            if (scope === 'before') return { ...r, beforeThumbUrl: null };
+            if (scope === 'after') return { ...r, afterThumbUrl: null };
+            if (scope === 'evidence') return { ...r, fileThumbUrl: null };
+            return r;
+        });
+    };
+
     reduceError(error) {
         try {
             if (!error) return 'Unknown error';
