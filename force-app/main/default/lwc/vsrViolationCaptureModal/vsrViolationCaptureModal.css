@@ -1,0 +1,42 @@
+:host {
+    display: block;
+}
+
+/* Make modal wider */
+:host .slds-modal__container {
+    width: 90vw;
+    max-width: 90vw;
+}
+
+/* Force the modal content area to a fixed height so overflow can scroll */
+:host .slds-modal__content {
+    height: 80vh;
+    max-height: 80vh;
+}
+
+/* Make the BODY scroll (this is where your component lives) */
+.modalBody {
+    position: relative;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Closing overlay */
+.modalOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.55);
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Footer layout */
+.footerBar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+

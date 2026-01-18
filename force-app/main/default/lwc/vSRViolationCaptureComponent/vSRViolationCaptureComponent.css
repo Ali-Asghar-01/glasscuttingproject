@@ -1,0 +1,564 @@
+:host {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.contentArea {
+    padding: 1rem;
+    box-sizing: border-box;
+}
+
+/* Top bar */
+.topBar {
+    align-items: end;
+}
+
+.topControls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    width: 100%;
+}
+
+.topControls .searchPicklist {
+    flex: 1 1 auto;
+    min-width: 18rem;
+}
+
+.addBtn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* Card base */
+.card {
+    background: #ffffff;
+    border: 1px solid #e8e8e8;
+    border-radius: 1rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    overflow: hidden;
+}
+
+.rowsWrap,
+.card {
+    margin-bottom: 1rem;
+}
+
+.cardHeader {
+    padding: 0.9rem 1rem 0.6rem 1rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.cardTitle {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1f1f1f;
+}
+
+.cardSub {
+    margin-top: 0.15rem;
+    font-size: 0.8rem;
+    color: #6b6b6b;
+}
+
+.cardBody {
+    padding: 1rem;
+}
+
+/* Empty state */
+.emptyState {
+    border: 1px dashed #dcdcdc;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    background: #fafafa;
+}
+
+.emptyTitle {
+    font-weight: 700;
+    color: #1f1f1f;
+}
+
+.emptySub {
+    margin-top: 0.25rem;
+    color: #6b6b6b;
+    font-size: 0.85rem;
+}
+
+/* Ensure long text never overflows and always wraps nicely */
+.textWrap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* File meta + errors */
+.fileMeta {
+    font-size: 0.8rem;
+    color: #1f1f1f;
+}
+.muted {
+    color: #6b6b6b;
+}
+.dotSep {
+    margin: 0 0.35rem;
+    color: #b0b0b0;
+}
+.errorText {
+    color: #ba0517;
+    font-size: 0.8rem;
+}
+
+/* Search */
+.searchPicklist {
+    position: relative;
+}
+
+.dropdown {
+    position: absolute;
+    z-index: 9999;
+    width: 100%;
+    margin-top: 0.25rem;
+    background: #ffffff;
+    border: 1px solid #e6e6e6;
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.12);
+    max-height: 16rem;
+    overflow: auto;
+}
+
+.dropdownItem {
+    padding: 0.75rem;
+    cursor: pointer;
+}
+
+.dropdownItem:hover,
+.dropdownItemActive {
+    background: #f3f3f3;
+}
+
+.optLabel {
+    font-size: 0.875rem;
+    color: #1f1f1f;
+    word-break: break-word;
+}
+
+.dropdownEmpty {
+    padding: 0.75rem;
+    color: #6b6b6b;
+    font-size: 0.875rem;
+}
+
+/* Search field shell */
+.searchField {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: #ffffff;
+    border: 1px solid #e8e8e8;
+    border-radius: 1rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    padding: 0.1rem 0.25rem;
+}
+
+.searchInput {
+    flex: 1 1 auto;
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.9rem;
+    color: #1f1f1f;
+    padding: 0.65rem 0.75rem;
+    border-radius: 1rem;
+    box-sizing: border-box;
+}
+
+.searchField:focus-within {
+    border-color: #1b96ff;
+    box-shadow: 0 0 0 3px rgba(27,150,255,0.2);
+}
+
+.clearBtn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 0.25rem 0.65rem 0.25rem 0.25rem;
+    line-height: 1;
+    border-radius: 999px;
+}
+
+.clearBtn:hover {
+    background: #f3f3f3;
+}
+
+.clearIcon {
+    font-size: 1.25rem;
+    color: #6b6b6b;
+}
+
+/* ========= Table UI ========= */
+.tableCard {
+    background: #ffffff;
+    border: 1px solid #e8e8e8;
+    border-radius: 1rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    overflow: hidden;
+}
+
+.tableHeader {
+    padding: 0.9rem 1rem 0.75rem 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    background: #fafafa;
+}
+
+.tableTitle {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1f1f1f;
+}
+
+.tableSub {
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    color: #6b6b6b;
+}
+
+.tableWrap {
+    width: 100%;
+    overflow: auto;
+    max-height: 55vh;
+}
+
+.uiTable {
+    border-collapse: separate;
+    border-spacing: 0 0.75rem;
+}
+
+.uiTable th,
+.uiTable td {
+    box-sizing: border-box;
+}
+
+.uiTable thead th {
+    background: #fbfbfb;
+    vertical-align: middle;
+}
+
+.uiTable thead th:first-child {
+    /* keep header aligned with body "card row" left border */
+    border-left: 1px solid transparent;
+}
+
+.uiTable thead th:last-child {
+    /* keep header aligned with body "card row" right border */
+    border-right: 1px solid transparent;
+}
+
+.uiTable tbody td {
+    /* Keep table-cell layout (do NOT use display:flex on td). */
+    vertical-align: middle !important;
+    background: #ffffff;
+    border-top: 1px solid #eef0f2;
+    border-bottom: 1px solid #eef0f2;
+}
+
+.uiTable tbody tr td:first-child {
+    border-left: 1px solid #eef0f2;
+    border-top-left-radius: 0.75rem;
+    border-bottom-left-radius: 0.75rem;
+}
+
+.uiTable tbody tr td:last-child {
+    border-right: 1px solid #eef0f2;
+    border-top-right-radius: 0.75rem;
+    border-bottom-right-radius: 0.75rem;
+}
+
+.rowHover:hover td {
+    background: #fcfcff;
+}
+
+.cellMain {
+    padding: 0.35rem 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 100%;
+}
+
+.labelText {
+    font-weight: 700;
+    color: #1f1f1f;
+    line-height: 1.2rem;
+}
+
+.descText {
+    color: #1f1f1f;
+    font-size: 0.9rem;
+    line-height: 1.35rem;
+}
+
+.colActions {
+    width: 4.25rem;
+    max-width: 4.25rem;
+}
+
+.cellActions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: 0;
+    width: 100%;
+}
+
+.tightTextarea {
+    --slds-c-textarea-sizing-min-height: 2.75rem;
+}
+
+/* Overlay spinner */
+.modalScope {
+    position: relative;
+    min-height: 10rem;
+}
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.55);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Column widths (readability + keep all visible) */
+.colLabel {
+    width: 18rem;
+    max-width: 18rem;
+}
+
+.colDescription {
+    width: 26rem;
+    max-width: 26rem;
+}
+
+.colCategory {
+    width: 9rem;
+    max-width: 9rem;
+}
+
+.colEvidence {
+    width: 18rem;
+    max-width: 18rem;
+}
+
+.colBefore,
+.colAfter {
+    width: 19rem;
+    max-width: 19rem;
+}
+
+.colFixed {
+    width: 6rem;
+    max-width: 6rem;
+}
+
+/* File preview block (thumb above, meta below) */
+.fileBlock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+}
+
+.thumbWrap {
+    display: flex;
+    align-items: center;
+}
+
+.thumbImg {
+    width: 150px;
+    height: auto;
+    border-radius: 0.6rem;
+    border: 1px solid #e6e6e6;
+    background: #fff;
+}
+
+.fileMetaRow {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fileName {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    text-align: center;
+}
+
+.fileActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+    margin-left: 0.5rem; /* space after filename */
+}
+
+.fileLink {
+    margin-left: 0.35rem;
+    color: #0176d3;
+    text-decoration: none;
+}
+
+.fileLink:hover,
+.fileLink:focus {
+    text-decoration: underline;
+}
+
+/* Center the upload control when no file exists */
+.uploadCenter {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Center inputs/controls in their narrow columns (Fixed stays centered) */
+.colFixed .cellMain {
+    align-items: center;
+}
+
+/* Keep text left-aligned but vertically centered */
+.colLabel .cellMain,
+.colDescription .cellMain {
+    align-items: flex-start;
+}
+
+/* Ensure file blocks and upload areas expand to cell width */
+.uploadCenter,
+.fileBlock {
+    width: 100%;
+}
+
+/* ------------------------------------------------------------
+   Column alignment: make Category/Before/After/Evidence content
+   start under the header (not centered in the cell).
+------------------------------------------------------------ */
+.colCategory .cellMain {
+    align-items: flex-start;
+}
+
+.colCategory lightning-combobox {
+    width: 100%;
+}
+
+.colBefore .uploadCenter,
+.colAfter .uploadCenter,
+.colEvidence .uploadCenter {
+    justify-content: flex-start;
+}
+
+.colBefore .fileBlock,
+.colAfter .fileBlock,
+.colEvidence .fileBlock {
+    align-items: flex-start;
+}
+
+.colBefore .thumbWrap,
+.colAfter .thumbWrap,
+.colEvidence .thumbWrap {
+    justify-content: flex-start;
+}
+
+.colBefore .fileMetaRow,
+.colAfter .fileMetaRow,
+.colEvidence .fileMetaRow {
+    justify-content: flex-start;
+}
+
+.colBefore .fileName,
+.colAfter .fileName,
+.colEvidence .fileName {
+    text-align: left;
+}
+
+.colBefore .slds-truncate,
+.colAfter .slds-truncate,
+.colEvidence .slds-truncate,
+.colCategory .slds-truncate {
+    text-align: left;
+}
+
+.removeBtn {
+    --slds-c-icon-color-foreground-default: #6b6b6b;
+}
+
+.removeBtn:hover {
+    --slds-c-icon-color-foreground-default: #ba0517;
+}
+
+/* Villa card layout: upload + thumb side-by-side */
+.villaRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.villaLeft {
+    flex: 1 1 auto;
+    min-width: 18rem;
+}
+
+.villaRight {
+    flex: 0 0 auto;
+}
+
+/* Villa section should stay left-aligned (like before) */
+.villaLeft .uploadCenter {
+    justify-content: flex-start;
+}
+
+.villaLeft .fileBlock {
+    align-items: flex-start;
+}
+
+.villaLeft .thumbWrap {
+    justify-content: flex-start;
+}
+
+.villaLeft .fileMetaRow {
+    justify-content: flex-start;
+}
+
+.villaLeft .fileName {
+    text-align: left;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 48em) {
+    .topControls {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .topControls .searchPicklist {
+        min-width: 0;
+        width: 100%;
+    }
+    .addBtn {
+        width: 100%;
+    }
+    .villaRow {
+        flex-direction: column;
+    }
+    .thumbImg {
+        width: 140px;
+    }
+}
+
