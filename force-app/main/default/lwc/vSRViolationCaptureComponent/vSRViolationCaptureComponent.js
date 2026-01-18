@@ -501,7 +501,8 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
                 vsrId: this.vsrId,
                 heading: violation.name,
                 category: isOther ? '' : violation.category,
-                description: isOther ? '' : violation.description
+                description: isOther ? '' : violation.description,
+                isNewViolation: !!this.isParentMode
             });
 
             const violationId = created?.violationId || null;
@@ -1160,7 +1161,10 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             && !!row.sourceViolationRecordId
             && !row.violationRecordId;
 
-        const isCategoryDisabledFinal = !!row.isCategoryDisabled || isRowDisabled || isParentBaselineRow;
+        // Carried-forward (copied) rows: lock Category + Delete in follow-up cases
+        const isCarriedForwardLocked = isParentMode && isCarriedForward;
+
+        const isCategoryDisabledFinal = !!row.isCategoryDisabled || isRowDisabled || isParentBaselineRow || isCarriedForwardLocked;
         const isDescriptionDisabled = (!!row.isOther && isRowDisabled) || (row.isOther && isParentBaselineRow);
 
         const isBeforeUploadDisabled = isRowDisabled || !!row.isBeforeDocNotReady || isParentBaselineRow;
@@ -1170,7 +1174,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         const isFixedDisabledFinal = isNewInFollowUp || isRowDisabled;
         const isFixed = isNewInFollowUp ? false : !!row.isFixed;
 
-        const isDeleteDisabledFinal = isRowDisabled || isParentBaselineRow;
+        const isDeleteDisabledFinal = isRowDisabled || isParentBaselineRow || isCarriedForwardLocked;
 
         const beforeUploadRecordId = row.beforeDocumentId || this.vsrId;
         const afterUploadRecordId = row.afterDocumentId || this.vsrId;
@@ -1181,6 +1185,7 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             isNewInFollowUp,
             isRowDisabled,
             isParentBaselineRow,
+            isCarriedForwardLocked,
             isCategoryDisabledFinal,
             isDescriptionDisabled,
             isBeforeUploadDisabled,

@@ -78,11 +78,13 @@ public with sharing class vSRViolationCaptureController {
         if (!existing.isEmpty()) {
             // Ensure villa placeholder exists even for previously-created VSRs
             ensureVillaDocumentForVsr(existing[0].Id);
+            // Follow-up behavior: ensure parent violations are copied into this VSR once (draft-safe)
+            ensureParentViolationsCopiedIntoChildVsr(caseId, existing[0].Id);
             return existing[0].Id;
         }
 
         Case caseRec = [
-            SELECT Id, Opportunity__c
+            SELECT Id, Opportunity__c, Related_Case__c
             FROM Case
             WHERE Id = :caseId
             LIMIT 1
@@ -109,7 +111,139 @@ public with sharing class vSRViolationCaptureController {
         insert vsr;
         // Create villa placeholder as part of VSR creation
         ensureVillaDocumentForVsr(vsr.Id);
+        // Follow-up behavior: ensure parent violations are copied into this VSR once (draft-safe)
+        ensureParentViolationsCopiedIntoChildVsr(caseId, vsr.Id);
         return vsr.Id;
+    }
+
+    /**
+     * Follow-up case requirement:
+     * When a Case has Related_Case__c (parent Case), we must insert all parent violations into the
+     * current Case's VSR immediately when the modal opens, so they persist even if the agent closes/reloads.
+     *
+     * - Does NOT set VSR status/dates.
+     * - Copies the parent's BEFORE doc as the child's BEFORE doc (as an independent cloned file).
+     * - Creates AFTER/NOC placeholders for each copied violation.
+     */
+    private static void ensureParentViolationsCopiedIntoChildVsr(Id caseId, Id childVsrId) {
+        if (caseId == null || childVsrId == null) return;
+
+        Case c = [
+            SELECT Id, Related_Case__c
+            FROM Case
+            WHERE Id = :caseId
+            LIMIT 1
+        ];
+        if (c.Related_Case__c == null) return;
+
+        Integer existingChildCount = [
+            SELECT COUNT()
+            FROM Violation__c
+            WHERE VSR__c = :childVsrId
+        ];
+        if (existingChildCount > 0) return; // already copied/created
+
+        List<VSR__c> parentVsrs = [
+            SELECT Id
+            FROM VSR__c
+            WHERE Case__c = :c.Related_Case__c
+            LIMIT 2
+        ];
+        if (parentVsrs.size() > 1) {
+            throw new AuraHandledException('More than one VSR exists for the parent Case. Please contact support.');
+        }
+        if (parentVsrs.isEmpty()) return;
+        Id parentVsrId = parentVsrs[0].Id;
+
+        List<Violation__c> parentViolations = [
+            SELECT Id, Heading__c, Category__c, Description__c, Is_Fixed__c
+            FROM Violation__c
+            WHERE VSR__c = :parentVsrId
+            ORDER BY CreatedDate ASC
+        ];
+        if (parentViolations.isEmpty()) return;
+
+        // Insert child violations (carried-forward) under the current VSR.
+        // New_Violation__c remains false for carried-forward rows.
+        Id violationRtId;
+        for (RecordType rt : [
+            SELECT Id, DeveloperName
+            FROM RecordType
+            WHERE SObjectType = 'Violation__c'
+            ORDER BY IsActive DESC, DeveloperName
+        ]) {
+            if (rt.DeveloperName == 'VSR') { violationRtId = rt.Id; break; }
+            if (violationRtId == null) violationRtId = rt.Id;
+        }
+        if (violationRtId == null) throw new AuraHandledException('No active RecordType found for Violation__c.');
+
+        List<Violation__c> childToInsert = new List<Violation__c>();
+        for (Violation__c pv : parentViolations) {
+            childToInsert.add(new Violation__c(
+                RecordTypeId = violationRtId,
+                VSR__c = childVsrId,
+                Heading__c = pv.Heading__c,
+                Category__c = pv.Category__c,
+                Description__c = pv.Description__c,
+                Is_Fixed__c = pv.Is_Fixed__c,
+                New_Violation__c = false
+            ));
+        }
+        insert childToInsert;
+
+        // Map parent -> child by index (preserves order)
+        Map<Id, Id> parentToChild = new Map<Id, Id>();
+        for (Integer i = 0; i < parentViolations.size(); i++) {
+            parentToChild.put(parentViolations[i].Id, childToInsert[i].Id);
+        }
+
+        // Create placeholders for child violations
+        Map<Id, Map<String, Id>> placeholdersByChild = ensureViolationPlaceholders(new List<Id>(parentToChild.values()));
+
+        // Find parent's BEFORE docs (by configured type)
+        String beforeType = getRequiredVsrTypes().get('BEFORE');
+        Map<Id, Documents__c> parentBeforeByViolation = new Map<Id, Documents__c>();
+        for (Documents__c d : [
+            SELECT Id, Violation__c, AttachmentID__c, Document_Type__c, LastModifiedDate
+            FROM Documents__c
+            WHERE Violation__c IN :parentToChild.keySet()
+            AND Document_Type__c = :beforeType
+            ORDER BY LastModifiedDate DESC
+        ]) {
+            if (d.Violation__c == null) continue;
+            if (!parentBeforeByViolation.containsKey(d.Violation__c)) parentBeforeByViolation.put(d.Violation__c, d);
+        }
+
+        // Attach cloned BEFORE files to each child BEFORE placeholder
+        List<Documents__c> beforeDocsToUpdate = new List<Documents__c>();
+        for (Id parentVioId : parentToChild.keySet()) {
+            Id childVioId = parentToChild.get(parentVioId);
+            if (childVioId == null) continue;
+
+            Id childBeforeDocId = (placeholdersByChild.containsKey(childVioId) ? placeholdersByChild.get(childVioId).get('BEFORE') : null);
+            if (childBeforeDocId == null) continue;
+
+            Documents__c parentBefore = parentBeforeByViolation.get(parentVioId);
+            if (parentBefore == null || String.isBlank(parentBefore.AttachmentID__c)) continue;
+
+            Id parentContentDocId = resolveContentDocumentIdFromAttachment(parentBefore.AttachmentID__c);
+            if (parentContentDocId == null) continue;
+
+            // Clone file to child BEFORE doc (independent attachment)
+            Id newChildVersionId = cloneContentDocumentToFirstPublishLocationReturnVersionId(parentContentDocId, childBeforeDocId);
+            if (newChildVersionId == null) continue;
+
+            beforeDocsToUpdate.add(new Documents__c(
+                Id = childBeforeDocId,
+                AttachmentID__c = String.valueOf(newChildVersionId),
+                Status__c = 'Submitted',
+                Is_Customer_Doc__c = true
+            ));
+        }
+        if (!beforeDocsToUpdate.isEmpty()) update beforeDocsToUpdate;
+
+        // Recalculate numbering for the newly-created carried-forward set
+        recalcViolationNumbers(childVsrId);
     }
 
     // ============================================================
@@ -153,7 +287,8 @@ public with sharing class vSRViolationCaptureController {
         Id vsrId,
         String heading,
         String category,
-        String description
+        String description,
+        Boolean isNewViolation
     ) {
         if (caseId == null) throw new AuraHandledException('Case Id is required.');
         if (vsrId == null) throw new AuraHandledException('VSR Id is required.');
@@ -190,11 +325,14 @@ public with sharing class vSRViolationCaptureController {
             Heading__c = heading,
             Category__c = category,
             Description__c = description,
-            Is_Fixed__c = false
+            Is_Fixed__c = false,
+            New_Violation__c = (isNewViolation == true)
         );
         insert vio;
 
         Map<String, Id> docIds = ensureViolationPlaceholdersInternal(vio.Id);
+        // Keep Violation_Number__c consistent after insert
+        recalcViolationNumbers(vsrId);
         return new Map<String, Object>{
             'violationId' => vio.Id,
             'beforeDocumentId' => docIds.get('BEFORE'),
@@ -429,7 +567,7 @@ public with sharing class vSRViolationCaptureController {
 
         Id currentVillaCd = null;
         if (currentVillaDoc != null && !String.isBlank(currentVillaDoc.AttachmentID__c)) {
-            try { currentVillaCd = (Id) currentVillaDoc.AttachmentID__c; } catch (Exception ignore) {}
+            currentVillaCd = resolveContentDocumentIdFromAttachment(currentVillaDoc.AttachmentID__c);
         }
 
         Id villaCdToShow = currentVillaCd;
@@ -441,7 +579,7 @@ public with sharing class vSRViolationCaptureController {
         // - else: load current VSR violations
         Id vsrToLoadId = baselineMode ? parentVsr.Id : currentVsr.Id;
         List<Violation__c> violations = [
-            SELECT Id, Heading__c, Category__c, Description__c, Is_Fixed__c
+            SELECT Id, Heading__c, Category__c, Description__c, Is_Fixed__c, New_Violation__c, Violation_Number__c
             FROM Violation__c
             WHERE VSR__c = :vsrToLoadId
             ORDER BY CreatedDate ASC
@@ -485,10 +623,13 @@ public with sharing class vSRViolationCaptureController {
                     'name' => v.Heading__c,
                     'category' => v.Category__c,
                     'description' => v.Description__c,
+                    'violationNumber' => v.Violation_Number__c,
                     'isFixed' => v.Is_Fixed__c,
                     'isFixedOnLoad' => v.Is_Fixed__c,
                     'documentId' => (docPick != null ? docPick.Id : null),
-                    'contentDocumentId' => (docPick != null ? docPick.AttachmentID__c : null),
+                    'contentDocumentId' => (docPick != null && resolveContentDocumentIdFromAttachment(docPick.AttachmentID__c) != null
+                        ? String.valueOf(resolveContentDocumentIdFromAttachment(docPick.AttachmentID__c))
+                        : null),
                     'fileName' => (docPick != null ? docPick.Name : null)
                 });
                 continue;
@@ -513,7 +654,9 @@ public with sharing class vSRViolationCaptureController {
                     'isParentBaselineRow' => true,
 
                     'beforeDocumentId' => (beforePick != null ? beforePick.Id : null),
-                    'beforeContentDocumentId' => (beforePick != null ? beforePick.AttachmentID__c : null),
+                    'beforeContentDocumentId' => (beforePick != null && resolveContentDocumentIdFromAttachment(beforePick.AttachmentID__c) != null
+                        ? String.valueOf(resolveContentDocumentIdFromAttachment(beforePick.AttachmentID__c))
+                        : null),
                     'beforeFileName' => (beforePick != null ? beforePick.Name : null),
 
                     'afterDocumentId' => null,
@@ -525,7 +668,10 @@ public with sharing class vSRViolationCaptureController {
                 if (beforePick == null) beforePick = bestLegacy.get(v.Id);
 
                 Documents__c afterPick = bestAfter.get(v.Id);
-                Boolean isCarriedForward = (afterPick != null);
+                // Follow-up case logic:
+                // - carried-forward rows are those NOT marked New_Violation__c
+                // - new rows are those marked New_Violation__c = true
+                Boolean isCarriedForward = (isFollowUp && v.New_Violation__c != true);
 
                 rows.add(new Map<String, Object>{
                     'violationRecordId' => v.Id,
@@ -534,6 +680,7 @@ public with sharing class vSRViolationCaptureController {
                     'name' => v.Heading__c,
                     'category' => v.Category__c,
                     'description' => v.Description__c,
+                    'violationNumber' => v.Violation_Number__c,
 
                     'isFixed' => v.Is_Fixed__c,
                     'isFixedOnLoad' => v.Is_Fixed__c,
@@ -541,11 +688,15 @@ public with sharing class vSRViolationCaptureController {
                     'isCarriedForward' => isCarriedForward,
 
                     'beforeDocumentId' => (beforePick != null ? beforePick.Id : null),
-                    'beforeContentDocumentId' => (beforePick != null ? beforePick.AttachmentID__c : null),
+                    'beforeContentDocumentId' => (beforePick != null && resolveContentDocumentIdFromAttachment(beforePick.AttachmentID__c) != null
+                        ? String.valueOf(resolveContentDocumentIdFromAttachment(beforePick.AttachmentID__c))
+                        : null),
                     'beforeFileName' => (beforePick != null ? beforePick.Name : null),
 
                     'afterDocumentId' => (afterPick != null ? afterPick.Id : null),
-                    'afterContentDocumentId' => (afterPick != null ? afterPick.AttachmentID__c : null),
+                    'afterContentDocumentId' => (afterPick != null && resolveContentDocumentIdFromAttachment(afterPick.AttachmentID__c) != null
+                        ? String.valueOf(resolveContentDocumentIdFromAttachment(afterPick.AttachmentID__c))
+                        : null),
                     'afterFileName' => (afterPick != null ? afterPick.Name : null)
                 });
             }
@@ -812,6 +963,9 @@ public with sharing class vSRViolationCaptureController {
             update toUpdate;
         }
 
+        // Maintain Violation_Number__c sequencing after submit edits (category changes, deletions, etc.)
+        recalcViolationNumbers(vsr.Id);
+
         // Per requirement: violations + their 3 placeholders are created before submit
         // (on Add / upload flows). Submit only updates VSR + existing violations.
 
@@ -859,10 +1013,14 @@ public with sharing class vSRViolationCaptureController {
                 }
             }
 
-            Id oldCdId = (Id) doc.AttachmentID__c;
+            Id oldContentDocId = resolveContentDocumentIdFromAttachment(doc.AttachmentID__c);
 
             // Per requirement: document Name must come from Document_Configuration__mdt (not file name)
             String newName = configuredDocNameForType(doc.Document_Type__c, doc.Name);
+
+            // Store "attachment record id" as the latest ContentVersion.Id
+            Id newVersionId = getLatestContentVersionId(newCdId);
+            String attachmentToStore = (newVersionId != null) ? String.valueOf(newVersionId) : contentDocumentId;
 
             update new Documents__c(
                 Id = doc.Id,
@@ -870,7 +1028,7 @@ public with sharing class vSRViolationCaptureController {
                 Status__c = 'Submitted',
                 Is_Customer_Doc__c = true,
                 Mandatory__c = true,
-                AttachmentID__c = contentDocumentId
+                AttachmentID__c = attachmentToStore
             );
 
             safeEnsureLink(doc.Id, newCdId);
@@ -893,11 +1051,11 @@ public with sharing class vSRViolationCaptureController {
                 }
             }
 
-            if (oldCdId != null && oldCdId != newCdId) {
+            if (oldContentDocId != null && oldContentDocId != newCdId) {
                 Set<Id> entities = new Set<Id>{ doc.Id };
                 if (doc.VSR__c != null) entities.add(doc.VSR__c);
                 if (doc.Violation__c != null) entities.add(doc.Violation__c);
-                safeUnlinkAndDeleteIfOrphaned(oldCdId, entities);
+                safeUnlinkAndDeleteIfOrphaned(oldContentDocId, entities);
             }
 
             return doc.Id;
@@ -979,7 +1137,7 @@ public with sharing class vSRViolationCaptureController {
         if (violationRtId == null) throw new AuraHandledException('No active RecordType found for Violation__c.');
 
         // Legacy method kept for compatibility; now create violation + 3 placeholders first.
-        Map<String, Object> created = createViolationWithPlaceholders(caseId, vsrId, heading, category, description);
+        Map<String, Object> created = createViolationWithPlaceholders(caseId, vsrId, heading, category, description, false);
         Id vioId = (Id) created.get('violationId');
         Id beforeDocId = (Id) created.get('beforeDocumentId');
 
@@ -1065,25 +1223,25 @@ public with sharing class vSRViolationCaptureController {
 
             if (parentCdId != null) {
                 try {
-                    Id newChildCdId = cloneContentDocumentToFirstPublishLocation(parentCdId, beforeDocId);
-                    if (newChildCdId != null) {
+                    Id newChildVersionId = cloneContentDocumentToFirstPublishLocationReturnVersionId(parentCdId, beforeDocId);
+                    if (newChildVersionId != null) {
                         update new Documents__c(
                             Id = beforeDocId,
-                            AttachmentID__c = String.valueOf(newChildCdId),
+                            AttachmentID__c = String.valueOf(newChildVersionId),
                             Status__c = 'Submitted',
                             Is_Customer_Doc__c = true
                         );
-                        safeEnsureLink(beforeDocId, newChildCdId);
                     }
                 } catch (Exception e) {
                     // If cloning fails, fall back to linking (but deletion logic prevents parent deletion).
+                    Id parentVerId = getLatestContentVersionId(parentCdId);
                     update new Documents__c(
                         Id = beforeDocId,
-                        AttachmentID__c = beforeContentDocumentId,
+                        AttachmentID__c = String.valueOf(parentVerId),
                         Status__c = 'Submitted',
                         Is_Customer_Doc__c = true
                     );
-                    try { safeEnsureLink(beforeDocId, parentCdId); } catch (Exception ignore2) {}
+                    // best-effort: do not force-link to keep "doc-only" rule; parent file remains on parent doc.
                 }
             }
         }
@@ -1106,7 +1264,7 @@ public with sharing class vSRViolationCaptureController {
         if (violationId == null) throw new AuraHandledException('Violation Id is required.');
 
         Violation__c v = [
-            SELECT Id, Is_Fixed__c
+            SELECT Id, Is_Fixed__c, VSR__c
             FROM Violation__c
             WHERE Id = :violationId
             LIMIT 1
@@ -1115,6 +1273,8 @@ public with sharing class vSRViolationCaptureController {
 
         deleteDocumentsAndFilesByViolationIds(new Set<Id>{ violationId });
         delete v;
+        // Re-sequence numbers after deletion
+        if (v.VSR__c != null) recalcViolationNumbers(v.VSR__c);
     }
 
     @AuraEnabled
@@ -1132,11 +1292,14 @@ public with sharing class vSRViolationCaptureController {
                 LIMIT 1
             ];
 
-            Id oldCdId = (Id) doc.AttachmentID__c;
+            Id oldContentDocId = resolveContentDocumentIdFromAttachment(doc.AttachmentID__c);
 
             Map<String, String> types = getRequiredVsrTypes();
             String villaType = types.get('VILLA');
             String villaName = requireVsrCfg(CFG_NAME_VILLA).Document_Name__c;
+
+            Id newVersionId = getLatestContentVersionId(newCdId);
+            String attachmentToStore = (newVersionId != null) ? String.valueOf(newVersionId) : contentDocumentId;
 
             update new Documents__c(
                 Id = doc.Id,
@@ -1145,7 +1308,7 @@ public with sharing class vSRViolationCaptureController {
                 Status__c = 'Submitted',
                 Is_Customer_Doc__c = true,
                 Mandatory__c = true,
-                AttachmentID__c = contentDocumentId
+                AttachmentID__c = attachmentToStore
             );
 
             ensureLink(doc.Id, newCdId);
@@ -1154,10 +1317,10 @@ public with sharing class vSRViolationCaptureController {
             if (doc.VSR__c != null) deleteContentDocumentLinkIfExists(doc.VSR__c, newCdId);
             removeOtherFilesFromEntities(new Set<Id>{ doc.Id }, newCdId);
 
-            if (oldCdId != null && oldCdId != newCdId) {
+            if (oldContentDocId != null && oldContentDocId != newCdId) {
                 Set<Id> entities = new Set<Id>{ doc.Id };
                 if (doc.VSR__c != null) entities.add(doc.VSR__c);
-                safeUnlinkAndDeleteIfOrphaned(oldCdId, entities);
+                safeUnlinkAndDeleteIfOrphaned(oldContentDocId, entities);
             }
 
             return doc.Id;
@@ -1342,8 +1505,7 @@ public with sharing class vSRViolationCaptureController {
 
         for (Documents__c d : docs) {
             if (String.isBlank(d.AttachmentID__c)) continue;
-            Id cdId = null;
-            try { cdId = (Id) d.AttachmentID__c; } catch (Exception ignore) { cdId = null; }
+            Id cdId = resolveContentDocumentIdFromAttachment(d.AttachmentID__c);
             if (cdId == null) continue;
 
             Set<Id> entities = new Set<Id>{ d.Id };
@@ -1366,8 +1528,7 @@ public with sharing class vSRViolationCaptureController {
 
         for (Documents__c d : docs) {
             if (String.isBlank(d.AttachmentID__c)) continue;
-            Id cdId = null;
-            try { cdId = (Id) d.AttachmentID__c; } catch (Exception ignore) { cdId = null; }
+            Id cdId = resolveContentDocumentIdFromAttachment(d.AttachmentID__c);
             if (cdId == null) continue;
 
             Set<Id> entities = new Set<Id>{ d.Id };
@@ -1443,6 +1604,73 @@ public with sharing class vSRViolationCaptureController {
         }
     }
 
+    /**
+     * Requirement: Documents__c.AttachmentID__c must store the "attachment record id" (ContentVersion.Id).
+     * - When we need a ContentDocumentId for links/thumbnails/deletes, we resolve it from that value.
+     * - Backward compatible: if AttachmentID__c already stores a ContentDocumentId, this returns it.
+     */
+    private static Id resolveContentDocumentIdFromAttachment(String attachmentIdVal) {
+        if (String.isBlank(attachmentIdVal)) return null;
+        Id raw;
+        try { raw = (Id) attachmentIdVal; } catch (Exception e) { return null; }
+
+        // Try as ContentVersion.Id
+        try {
+            List<ContentVersion> cvs = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :raw
+                LIMIT 1
+            ];
+            if (!cvs.isEmpty() && cvs[0].ContentDocumentId != null) return cvs[0].ContentDocumentId;
+        } catch (Exception ignore) {}
+
+        // Otherwise assume it's already a ContentDocumentId
+        return raw;
+    }
+
+    private static Id getLatestContentVersionId(Id contentDocumentId) {
+        if (contentDocumentId == null) return null;
+        try {
+            return [
+                SELECT Id
+                FROM ContentVersion
+                WHERE ContentDocumentId = :contentDocumentId
+                AND IsLatest = true
+                LIMIT 1
+            ].Id;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Id cloneContentDocumentToFirstPublishLocationReturnVersionId(Id sourceContentDocumentId, Id firstPublishLocationId) {
+        if (sourceContentDocumentId == null || firstPublishLocationId == null) return null;
+
+        ContentVersion src = [
+            SELECT Id, Title, FileExtension, VersionData, PathOnClient
+            FROM ContentVersion
+            WHERE ContentDocumentId = :sourceContentDocumentId
+            AND IsLatest = true
+            LIMIT 1
+        ];
+
+        String path = src.PathOnClient;
+        if (String.isBlank(path)) {
+            String ext = String.isBlank(src.FileExtension) ? '' : ('.' + src.FileExtension);
+            path = (String.isBlank(src.Title) ? 'File' : src.Title) + ext;
+        }
+
+        ContentVersion cv = new ContentVersion();
+        cv.FirstPublishLocationId = firstPublishLocationId;
+        cv.Title = src.Title;
+        cv.PathOnClient = path;
+        cv.VersionData = src.VersionData;
+        insert cv;
+
+        return cv.Id;
+    }
+
     private static Id cloneContentDocumentToFirstPublishLocation(Id sourceContentDocumentId, Id firstPublishLocationId) {
         if (sourceContentDocumentId == null || firstPublishLocationId == null) return null;
 
@@ -1467,6 +1695,62 @@ public with sharing class vSRViolationCaptureController {
         cv.VersionData = src.VersionData;
         insert cv;
         return cv.ContentDocumentId;
+    }
+
+    private static void recalcViolationNumbers(Id vsrId) {
+        if (vsrId == null) return;
+
+        List<Violation__c> vios = [
+            SELECT Id, Category__c, CreatedDate
+            FROM Violation__c
+            WHERE VSR__c = :vsrId
+            ORDER BY CreatedDate ASC
+        ];
+        if (vios.isEmpty()) return;
+
+        Map<String, List<Violation__c>> byLetter = new Map<String, List<Violation__c>>{
+            'A' => new List<Violation__c>(),
+            'B' => new List<Violation__c>(),
+            'C' => new List<Violation__c>()
+        };
+        List<Violation__c> noCat = new List<Violation__c>();
+
+        for (Violation__c v : vios) {
+            String letter = letterForCategory(v.Category__c);
+            if (letter == 'A' || letter == 'B' || letter == 'C') byLetter.get(letter).add(v);
+            else noCat.add(v);
+        }
+
+        List<Violation__c> toUpdate = new List<Violation__c>();
+        for (String letter : new List<String>{ 'A', 'B', 'C' }) {
+            List<Violation__c> group = byLetter.get(letter);
+            Integer i = 0;
+            for (Violation__c v : group) {
+                i++;
+                toUpdate.add(new Violation__c(
+                    Id = v.Id,
+                    Violation_Number__c = 'ITEM ' + letter + '.' + String.valueOf(i)
+                ));
+            }
+        }
+        for (Violation__c v : noCat) {
+            toUpdate.add(new Violation__c(Id = v.Id, Violation_Number__c = null));
+        }
+
+        if (!toUpdate.isEmpty()) {
+            if (!Schema.sObjectType.Violation__c.isUpdateable()) {
+                throw new AuraHandledException('You do not have permission to update Violation records.');
+            }
+            update toUpdate;
+        }
+    }
+
+    private static String letterForCategory(String category) {
+        String c = String.isBlank(category) ? '' : category.trim().toLowerCase();
+        if (c == 'yellow') return 'A';
+        if (c == 'orange') return 'B';
+        if (c == 'red') return 'C';
+        return null;
     }
 
     private static Boolean readBool(Map<String, Object> row, String key) {
@@ -1579,8 +1863,7 @@ public with sharing class vSRViolationCaptureController {
 
         // NO carry-forward of villa picture. Only enforce link to Documents__c (NOT to VSR__c).
         if (!String.isBlank(doc.AttachmentID__c)) {
-            Id cdId;
-            try { cdId = (Id) doc.AttachmentID__c; } catch (Exception ignore) { cdId = null; }
+            Id cdId = resolveContentDocumentIdFromAttachment(doc.AttachmentID__c);
 
             if (cdId != null) {
                 ensureLink(doc.Id, cdId);
@@ -1641,21 +1924,18 @@ public with sharing class vSRViolationCaptureController {
             LIMIT 1
         ];
 
-        Id oldCdId = null;
-        if (!String.isBlank(doc.AttachmentID__c)) {
-            try { oldCdId = (Id) doc.AttachmentID__c; } catch (Exception ignore) {}
-        }
+        Id oldContentDocId = resolveContentDocumentIdFromAttachment(doc.AttachmentID__c);
 
         if (!String.isBlank(doc.AttachmentID__c)) {
             doc.AttachmentID__c = null;
             update doc;
         }
 
-        if (oldCdId != null) {
+        if (oldContentDocId != null) {
             Set<Id> entities = new Set<Id>{ doc.Id };
             if (doc.VSR__c != null) entities.add(doc.VSR__c);
             if (doc.Violation__c != null) entities.add(doc.Violation__c);
-            safeUnlinkAndDeleteIfOrphaned(oldCdId, entities);
+            safeUnlinkAndDeleteIfOrphaned(oldContentDocId, entities);
         }
     }
 }
