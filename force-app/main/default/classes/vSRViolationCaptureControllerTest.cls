@@ -2,7 +2,18 @@
 public class vSRViolationCaptureControllerTest {
     private static Id createInventory() {
         SObject inv = Schema.getGlobalDescribe().get('Inventory__c').newSObject();
-        inv.put('Name', 'Test Inventory');
+        Map<String, Schema.SObjectField> fields = inv.getSObjectType().getDescribe().fields.getMap();
+
+        if (fields.containsKey('Name')) inv.put('Name', 'Test Inventory');
+        if (fields.containsKey('Status__c')) inv.put('Status__c', 'Available');
+        if (fields.containsKey('available_date__c')) inv.put('available_date__c', Date.today());
+        if (fields.containsKey('No_of_Parkings__c')) inv.put('No_of_Parkings__c', 1);
+        if (fields.containsKey('Unit_Area_Sqft__c')) inv.put('Unit_Area_Sqft__c', 50.0);
+        if (fields.containsKey('UnitLocation__c')) inv.put('UnitLocation__c', 'Test');
+        if (fields.containsKey('Unit_List_Price__c')) inv.put('Unit_List_Price__c', 100);
+        if (fields.containsKey('Unit_Type__c')) inv.put('Unit_Type__c', '3 Bedroom');
+        if (fields.containsKey('Unit_Code__c')) inv.put('Unit_Code__c', 'UNIT-1');
+
         insert inv;
         return (Id) inv.get('Id');
     }
@@ -11,9 +22,13 @@ public class vSRViolationCaptureControllerTest {
         SObject bu = Schema.getGlobalDescribe().get('Booking_Unit__c').newSObject();
         bu.put('Booking__c', oppId);
         bu.put('Inventory__c', inventoryId);
-        // some orgs require Name
-        if (bu.getSObjectType().getDescribe().fields.getMap().containsKey('Name')) {
+        Map<String, Schema.SObjectField> fields = bu.getSObjectType().getDescribe().fields.getMap();
+        // some orgs require Name or price
+        if (fields.containsKey('Name')) {
             bu.put('Name', 'BU');
+        }
+        if (fields.containsKey('Booking_Unit_Price__c')) {
+            bu.put('Booking_Unit_Price__c', 100);
         }
         insert bu;
     }
@@ -62,6 +77,25 @@ public class vSRViolationCaptureControllerTest {
         ].ContentDocumentId;
     }
 
+    private static Id getLatestVersionId(Id contentDocumentId) {
+        return [
+            SELECT Id
+            FROM ContentVersion
+            WHERE ContentDocumentId = :contentDocumentId
+            AND IsLatest = true
+            LIMIT 1
+        ].Id;
+    }
+
+    private static Id getContentDocumentIdFromVersion(Id versionId) {
+        return [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Id = :versionId
+            LIMIT 1
+        ].ContentDocumentId;
+    }
+
     @IsTest
     static void testDraftBanner_hasDraftVsr() {
         Case c = createCaseWithOpp(false, null);
@@ -71,6 +105,13 @@ public class vSRViolationCaptureControllerTest {
 
         System.assertNotEquals(null, vsrId);
         System.assertEquals(true, VsrDraftStatusController.hasDraftVsr(c.Id));
+    }
+
+    @IsTest
+    static void testGetExisting_nullCaseId() {
+        String jsonStr = vSRViolationCaptureController.getExistingVSRWithViolations(null);
+        Map<String, Object> outMap = (Map<String, Object>) JSON.deserializeUntyped(jsonStr);
+        System.assertEquals(false, (Boolean) outMap.get('hasVsr'));
     }
 
     @IsTest
@@ -172,7 +213,7 @@ public class vSRViolationCaptureControllerTest {
             FROM Documents__c
             WHERE Violation__c = :childVios[0].Id
         ];
-        // 3 placeholders
+        // 3 placeholders (Before/After/NOC) and all should have files carried down if present on parent
         System.assertEquals(3, childDocs.size());
         for (Documents__c d : childDocs) {
             System.assertNotEquals(null, d.AttachmentID__c, 'Copied docs should carry down files where available');
@@ -180,6 +221,117 @@ public class vSRViolationCaptureControllerTest {
             Id verId = (Id) d.AttachmentID__c;
             System.assertNotEquals(null, [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :verId LIMIT 1].ContentDocumentId);
         }
+    }
+
+    @IsTest
+    static void testGetExisting_followUpLoadsChildRowsNotBaseline() {
+        // parent with 1 violation + docs
+        Case parentCase = createCaseWithOpp(false, null);
+        Id parentVsrId = vSRViolationCaptureController.ensureVsrForCase(parentCase.Id);
+
+        Map<String, Object> created = vSRViolationCaptureController.createViolationWithPlaceholders(
+            parentCase.Id,
+            parentVsrId,
+            'P1',
+            'Orange',
+            'Desc',
+            false
+        );
+        Id pBeforeDocId = (Id) created.get('beforeDocumentId');
+        Id pAfterDocId  = (Id) created.get('afterDocumentId');
+        Id pNocDocId    = (Id) created.get('nocDocumentId');
+
+        Id pBeforeCdId = uploadFileToRecord(pBeforeDocId, 'pbefore.jpg');
+        vSRViolationCaptureController.updateViolationDocumentAfterUpload(pBeforeDocId, 'pbefore.jpg', String.valueOf(pBeforeCdId));
+        Id pAfterCdId = uploadFileToRecord(pAfterDocId, 'pafter.jpg');
+        vSRViolationCaptureController.updateViolationDocumentAfterUpload(pAfterDocId, 'pafter.jpg', String.valueOf(pAfterCdId));
+        Id pNocCdId = uploadFileToRecord(pNocDocId, 'pnoc.jpg');
+        vSRViolationCaptureController.updateViolationDocumentAfterUpload(pNocDocId, 'pnoc.jpg', String.valueOf(pNocCdId));
+
+        // child follow-up triggers copy on ensureVsrForCase
+        Case childCase = createCaseWithOpp(true, parentCase.Id);
+        vSRViolationCaptureController.ensureVsrForCase(childCase.Id);
+
+        String jsonStr = vSRViolationCaptureController.getExistingVSRWithViolations(childCase.Id);
+        Map<String, Object> outMap = (Map<String, Object>) JSON.deserializeUntyped(jsonStr);
+        System.assertEquals(true, (Boolean) outMap.get('hasVsr'));
+        System.assertEquals(true, (Boolean) outMap.get('isFollowUp'));
+        System.assertEquals(false, (Boolean) outMap.get('sourceIsParentBaseline'), 'We copy parent rows into child, so baseline mode should not apply.');
+
+        List<Object> rows = (List<Object>) outMap.get('rows');
+        System.assertEquals(1, rows.size());
+        Map<String, Object> r0 = (Map<String, Object>) rows[0];
+        System.assertEquals(true, (Boolean) r0.get('isCarriedForward'));
+        System.assertNotEquals(null, r0.get('beforeContentDocumentId'));
+        System.assertNotEquals(null, r0.get('afterContentDocumentId'));
+    }
+
+    @IsTest
+    static void testSubmitVsr_updatesStatusAndRequiresVillaForClear() {
+        Case c = createCaseWithOpp(false, null);
+        Id vsrId = vSRViolationCaptureController.ensureVsrForCase(c.Id);
+
+        // Add one Yellow violation with before doc file (so Non-Compliant expected)
+        Map<String, Object> created = vSRViolationCaptureController.createViolationWithPlaceholders(
+            c.Id, vsrId, 'Y1', 'Yellow', 'd', false
+        );
+        Id beforeDocId = (Id) created.get('beforeDocumentId');
+        Id beforeCdId = uploadFileToRecord(beforeDocId, 'before.jpg');
+        vSRViolationCaptureController.updateViolationDocumentAfterUpload(beforeDocId, 'before.jpg', String.valueOf(beforeCdId));
+
+        // Upload villa picture (required for Clear/Clear with Comments; but Non-Compliant doesn't require it.
+        // Still upload to cover villa path.)
+        Id villaDocId = vSRViolationCaptureController.ensureVillaDocumentForVsr(vsrId);
+        Id villaCdId = uploadFileToRecord(villaDocId, 'villa.jpg');
+        vSRViolationCaptureController.updateVillaPictureAfterUpload(villaDocId, 'villa.jpg', String.valueOf(villaCdId));
+
+        List<Map<String, Object>> payload = new List<Map<String, Object>>{
+            new Map<String, Object>{
+                'violationRecordId' => String.valueOf((Id) created.get('violationId')),
+                'documentId' => String.valueOf(beforeDocId),
+                'name' => 'Y1',
+                'category' => 'Yellow',
+                'description' => 'd',
+                'isFixed' => false
+            }
+        };
+
+        Test.startTest();
+        Id savedVsrId = vSRViolationCaptureController.submitVSR(
+            c.Id,
+            JSON.serialize(payload),
+            villaDocId,
+            JSON.serialize(new List<String>()),
+            JSON.serialize(new List<String>())
+        );
+        Test.stopTest();
+
+        VSR__c saved = [SELECT Status__c, Issued_date__c FROM VSR__c WHERE Id = :savedVsrId LIMIT 1];
+        System.assertEquals('Non-Compliant', saved.Status__c);
+        System.assertEquals(Date.today(), saved.Issued_date__c);
+    }
+
+    @IsTest
+    static void testGetThumbnailUrls_andClearDocumentFile() {
+        Case c = createCaseWithOpp(false, null);
+        Id vsrId = vSRViolationCaptureController.ensureVsrForCase(c.Id);
+
+        Map<String, Object> created = vSRViolationCaptureController.createViolationWithPlaceholders(
+            c.Id, vsrId, 'T1', 'Orange', 'd', false
+        );
+        Id beforeDocId = (Id) created.get('beforeDocumentId');
+
+        Id cdId = uploadFileToRecord(beforeDocId, 'thumb.jpg');
+        vSRViolationCaptureController.updateViolationDocumentAfterUpload(beforeDocId, 'thumb.jpg', String.valueOf(cdId));
+
+        Map<Id, String> urls = vSRViolationCaptureController.getThumbnailUrls(new List<Id>{ cdId });
+        System.assertEquals(true, urls.containsKey(cdId));
+        System.assert(String.valueOf(urls.get(cdId)).contains('renditionDownload'));
+
+        // Clear document file
+        vSRViolationCaptureController.clearDocumentFile(beforeDocId);
+        Documents__c docAfter = [SELECT AttachmentID__c FROM Documents__c WHERE Id = :beforeDocId LIMIT 1];
+        System.assertEquals(null, docAfter.AttachmentID__c);
     }
 
     @IsTest
@@ -216,6 +368,27 @@ public class vSRViolationCaptureControllerTest {
 
         Violation__c y2 = [SELECT Violation_Number__c FROM Violation__c WHERE VSR__c = :vsrId AND Heading__c = 'Y2' LIMIT 1];
         System.assertEquals('ITEM A.1', y2.Violation_Number__c);
+    }
+
+    @IsTest
+    static void testNewViolationFlag_setOnFollowUpAdds() {
+        Case parentCase = createCaseWithOpp(false, null);
+        vSRViolationCaptureController.ensureVsrForCase(parentCase.Id);
+
+        Case childCase = createCaseWithOpp(true, parentCase.Id);
+        Id childVsrId = vSRViolationCaptureController.ensureVsrForCase(childCase.Id);
+
+        Map<String, Object> createdNew = vSRViolationCaptureController.createViolationWithPlaceholders(
+            childCase.Id,
+            childVsrId,
+            'NewInChild',
+            'Orange',
+            'd',
+            true
+        );
+        Id newVioId = (Id) createdNew.get('violationId');
+        Violation__c v = [SELECT New_Violation__c FROM Violation__c WHERE Id = :newVioId LIMIT 1];
+        System.assertEquals(true, v.New_Violation__c);
     }
 }
 
