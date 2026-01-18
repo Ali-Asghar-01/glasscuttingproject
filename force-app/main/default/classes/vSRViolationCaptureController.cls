@@ -200,47 +200,95 @@ public with sharing class vSRViolationCaptureController {
         // Create placeholders for child violations
         Map<Id, Map<String, Id>> placeholdersByChild = ensureViolationPlaceholders(new List<Id>(parentToChild.values()));
 
-        // Find parent's BEFORE docs (by configured type)
-        String beforeType = getRequiredVsrTypes().get('BEFORE');
+        // Find parent's docs (by configured types)
+        Map<String, String> types = getRequiredVsrTypes();
+        String beforeType = types.get('BEFORE');
+        String afterType  = types.get('AFTER');
+        String nocType    = types.get('NOC');
+
         Map<Id, Documents__c> parentBeforeByViolation = new Map<Id, Documents__c>();
+        Map<Id, Documents__c> parentAfterByViolation  = new Map<Id, Documents__c>();
+        Map<Id, Documents__c> parentNocByViolation    = new Map<Id, Documents__c>();
+
         for (Documents__c d : [
             SELECT Id, Violation__c, AttachmentID__c, Document_Type__c, LastModifiedDate
             FROM Documents__c
             WHERE Violation__c IN :parentToChild.keySet()
-            AND Document_Type__c = :beforeType
+            AND Document_Type__c IN :new List<String>{ beforeType, afterType, nocType }
             ORDER BY LastModifiedDate DESC
         ]) {
             if (d.Violation__c == null) continue;
-            if (!parentBeforeByViolation.containsKey(d.Violation__c)) parentBeforeByViolation.put(d.Violation__c, d);
+            if (d.Document_Type__c == beforeType) {
+                if (!parentBeforeByViolation.containsKey(d.Violation__c)) parentBeforeByViolation.put(d.Violation__c, d);
+            } else if (d.Document_Type__c == afterType) {
+                if (!parentAfterByViolation.containsKey(d.Violation__c)) parentAfterByViolation.put(d.Violation__c, d);
+            } else if (d.Document_Type__c == nocType) {
+                if (!parentNocByViolation.containsKey(d.Violation__c)) parentNocByViolation.put(d.Violation__c, d);
+            }
         }
 
-        // Attach cloned BEFORE files to each child BEFORE placeholder
-        List<Documents__c> beforeDocsToUpdate = new List<Documents__c>();
+        // Attach cloned BEFORE/AFTER/NOC files to each child placeholder (if present on parent)
+        List<Documents__c> docsToUpdate = new List<Documents__c>();
         for (Id parentVioId : parentToChild.keySet()) {
             Id childVioId = parentToChild.get(parentVioId);
             if (childVioId == null) continue;
 
             Id childBeforeDocId = (placeholdersByChild.containsKey(childVioId) ? placeholdersByChild.get(childVioId).get('BEFORE') : null);
-            if (childBeforeDocId == null) continue;
+            Id childAfterDocId  = (placeholdersByChild.containsKey(childVioId) ? placeholdersByChild.get(childVioId).get('AFTER') : null);
+            Id childNocDocId    = (placeholdersByChild.containsKey(childVioId) ? placeholdersByChild.get(childVioId).get('NOC') : null);
 
+            // BEFORE
             Documents__c parentBefore = parentBeforeByViolation.get(parentVioId);
-            if (parentBefore == null || String.isBlank(parentBefore.AttachmentID__c)) continue;
+            if (childBeforeDocId != null && parentBefore != null && !String.isBlank(parentBefore.AttachmentID__c)) {
+                Id parentContentDocId = resolveContentDocumentIdFromAttachment(parentBefore.AttachmentID__c);
+                if (parentContentDocId != null) {
+                    Id newChildVersionId = cloneContentDocumentToFirstPublishLocationReturnVersionId(parentContentDocId, childBeforeDocId);
+                    if (newChildVersionId != null) {
+                        docsToUpdate.add(new Documents__c(
+                            Id = childBeforeDocId,
+                            AttachmentID__c = String.valueOf(newChildVersionId),
+                            Status__c = 'Submitted',
+                            Is_Customer_Doc__c = true
+                        ));
+                    }
+                }
+            }
 
-            Id parentContentDocId = resolveContentDocumentIdFromAttachment(parentBefore.AttachmentID__c);
-            if (parentContentDocId == null) continue;
+            // AFTER
+            Documents__c parentAfter = parentAfterByViolation.get(parentVioId);
+            if (childAfterDocId != null && parentAfter != null && !String.isBlank(parentAfter.AttachmentID__c)) {
+                Id parentContentDocId = resolveContentDocumentIdFromAttachment(parentAfter.AttachmentID__c);
+                if (parentContentDocId != null) {
+                    Id newChildVersionId = cloneContentDocumentToFirstPublishLocationReturnVersionId(parentContentDocId, childAfterDocId);
+                    if (newChildVersionId != null) {
+                        docsToUpdate.add(new Documents__c(
+                            Id = childAfterDocId,
+                            AttachmentID__c = String.valueOf(newChildVersionId),
+                            Status__c = 'Submitted',
+                            Is_Customer_Doc__c = true
+                        ));
+                    }
+                }
+            }
 
-            // Clone file to child BEFORE doc (independent attachment)
-            Id newChildVersionId = cloneContentDocumentToFirstPublishLocationReturnVersionId(parentContentDocId, childBeforeDocId);
-            if (newChildVersionId == null) continue;
-
-            beforeDocsToUpdate.add(new Documents__c(
-                Id = childBeforeDocId,
-                AttachmentID__c = String.valueOf(newChildVersionId),
-                Status__c = 'Submitted',
-                Is_Customer_Doc__c = true
-            ));
+            // NOC
+            Documents__c parentNoc = parentNocByViolation.get(parentVioId);
+            if (childNocDocId != null && parentNoc != null && !String.isBlank(parentNoc.AttachmentID__c)) {
+                Id parentContentDocId = resolveContentDocumentIdFromAttachment(parentNoc.AttachmentID__c);
+                if (parentContentDocId != null) {
+                    Id newChildVersionId = cloneContentDocumentToFirstPublishLocationReturnVersionId(parentContentDocId, childNocDocId);
+                    if (newChildVersionId != null) {
+                        docsToUpdate.add(new Documents__c(
+                            Id = childNocDocId,
+                            AttachmentID__c = String.valueOf(newChildVersionId),
+                            Status__c = 'Submitted',
+                            Is_Customer_Doc__c = true
+                        ));
+                    }
+                }
+            }
         }
-        if (!beforeDocsToUpdate.isEmpty()) update beforeDocsToUpdate;
+        if (!docsToUpdate.isEmpty()) update docsToUpdate;
 
         // Recalculate numbering for the newly-created carried-forward set
         recalcViolationNumbers(childVsrId);

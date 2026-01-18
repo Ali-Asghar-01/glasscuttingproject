@@ -1179,6 +1179,8 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
         const beforeUploadRecordId = row.beforeDocumentId || this.vsrId;
         const afterUploadRecordId = row.afterDocumentId || this.vsrId;
 
+        const isAfterRemoveDisabled = isRowDisabled || isParentBaselineRow || isCarriedForwardLocked;
+
         return {
             ...row,
             isCarriedForward,
@@ -1194,7 +1196,8 @@ export default class VSRViolationCaptureComponent extends NavigationMixin(Lightn
             isDeleteDisabledFinal,
             isFixed,
             beforeUploadRecordId,
-            afterUploadRecordId
+            afterUploadRecordId,
+            isAfterRemoveDisabled
         };
     }
 
